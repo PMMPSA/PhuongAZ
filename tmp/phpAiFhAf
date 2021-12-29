@@ -1,0 +1,6 @@
+name: FFA
+author: zLoostyG0D
+description: Plugin mais compacto de FFA
+version: 1
+main: zLoostyG0D\Main
+api: 2.0.0

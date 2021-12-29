@@ -1,0 +1,15 @@
+name: Sopa
+main: Sopa\iPeedro
+version: 1.2
+api: 2.0.0
+author: iPeedroPvP_
+commands:
+ sopa:
+  description: Receber sopas
+permissions:
+ sopa.cmd:
+  default: op
+  description: Receber sopas
+ 
+
+  

@@ -1,0 +1,6 @@
+name: AUTOARMOR
+main: dci\dci
+version: 2.2.1
+author: HOST
+api: [1.13.0]
+load: POSTWORLD

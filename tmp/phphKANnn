@@ -1,0 +1,397 @@
+name: Race
+main: FAMIMA\AthleticRace\Main
+author: FAMIMA
+api: [1.10.0, 2.0.0]
+version: 0.2.2
+<?php
+
+namespace FAMIMA\AthleticRace;
+
+#base
+use pocketmine\plugin\PluginBase;
+use pocketmine\event\Listener;
+use pocketmine\Server;
+use pocketmine\scheduler\Task;
+
+#player
+use pocketmine\Player;
+
+#block
+use pocketmine\block\Block;
+
+#event
+use pocketmine\event\player\PlayerInteractEvent;
+use pocketmine\event\block\SignChangeEvent;
+use pocketmine\event\player\PlayerQuitEvent;
+use pocketmine\event\player\PlayerDeathEvent;
+
+#tile
+use pocketmine\tile\Tile;
+use pocketmine\tile\Sign;
+
+#utils
+use pocketmine\utils\TextFormat;
+use pocketmine\utils\Config;
+
+#math
+use pocketmine\math\Vector3;
+
+#level
+use pocketmine\level\Level;
+use pocketmine\level\Position;
+
+#item
+use pocketmine\item\Item;
+
+class Main extends PluginBase implements Listener
+{
+	public function onEnable()
+	{
+		$plugin = "AthleticRace";
+		$this->getServer()->getPluginManager()->registerEvents($this,$this);
+		$this->getLogger()->info(TextFormat::GREEN.$plugin."La lettura è stata completata");
+		$this->getLogger()->info(TextFormat::RED.$plugin."ByKannibale");
+		if(!file_exists($this->getDataFolder())){
+		mkdir($this->getDataFolder(), 0744, true);
+		}
+		$this->Config = new Config($this->getDataFolder() . "Config.yml", Config::YAML);
+		$ap = $this->Config->getAll(true);
+		foreach ($ap as $ac) {
+			$this->AP[$ac] = array();
+			$this->AC[$ac] = 0;
+		}
+	}
+	public function createAR(SignChangeEvent $event)
+	{
+		$p = $event->getPlayer();
+		$sl = $event->getLines();
+		if($p->isOp())
+		{
+			if($sl[0] == "[AR]")
+			{
+				$ln2 = $sl[1];
+				$b = $event->getBlock();
+				$x = $b->x;
+				$y = $b->y;
+				$z = $b->z;
+				$xyz = array($x, $y, $z);
+				$event->setLine(0, "§l§a[§4AthleticRace§a]");
+				$asxyz = $x.".".$y.".".$z;
+				$this->AR[$asxyz] = 1;
+				$this->AR["AR"] = $asxyz;
+				$this->Config->set($asxyz, $xyz);
+				$this->Config->save();
+				$p->sendMessage("§l§aSuccessivamente, si prega di impostare il cartello di asst(Sarà la posizione iniziale dello sfidante sfidante)");
+			}else if($sl[0] == "asst"){
+				if(isset($this->AR["AR"]))
+				{
+					$asr = $this->AR["AR"];
+					if($this->AR[$asr] == 1)
+					{
+						$this->AR[$asr] = 2;
+						$asst = $this->Config->get($asr);
+						$b = $event->getBlock();
+						$x = $b->x;
+						$y = $b->y;
+						$z = $b->z;
+						$asst[3] = $x;
+						$asst[4] = $y;
+						$asst[5] = $z;
+						$this->Config->set($asr, $asst);
+						$this->Config->save();
+						$event->setLine(0, "§6§lStart");
+						$p->sendMessage("§l§aSuccessivamente, si prega di impostare il cartello di asend(Obiettivo cartello dello sfidante)");
+					}else{
+						$p->sendMessage("§l§4Atletica cartello non è installato, o è già Atletica punto di partenza è impostato");
+					}
+				}
+			}else if($sl[0] == "asend"){
+				if(isset($this->AR["AR"]))
+				{
+					$asr = $this->AR["AR"];
+					if($this->AR[$asr] == 2){
+						$asend = $this->Config->get($asr);
+						$b = $event->getBlock();
+						$asend[6] = $b->x;
+						$asend[7] = $b->y;
+						$asend[8] = $b->z;
+						$this->Config->set($asr, $asend);
+						$this->Config->save();
+						$this->AR[$asr] = 3;
+						$event->setLine(0, "§a§lGoal");
+						$p->sendMessage("§l§aSuccessivamente, si prega di impostare il cartello di asst2(posizione secondo sfidante iniziale)");
+					}else{
+						$p->sendMessage("§l§4Atletica cartello non è installato, o è già Atletica punto di partenza è impostato");
+					}
+				}
+			}else if($sl[0] == "asst2"){
+				if(isset($this->AR["AR"]))
+				{
+					$asr = $this->AR["AR"];
+					if($this->AR[$asr] == 3)
+					{
+						$this->AR[$asr] = 4;
+						$asst = $this->Config->get($asr);
+						$b = $event->getBlock();
+						$x = $b->x;
+						$y = $b->y;
+						$z = $b->z;
+						$asst[9] = $x;
+						$asst[10] = $y;
+						$asst[11] = $z;
+						$this->Config->set($asr, $asst);
+						$this->Config->save();
+						$event->setLine(0, "§6§lStart");
+						$p->sendMessage("§l§aSuccessivamente, si prega di impostare il cartello di asend2(punto finale sfidante 2)");
+					}else{
+						$p->sendMessage("§l§4Atletica cartello non è installato, o è già Atletica punto di partenza è impostato");
+					}
+				}			
+			}else if($sl[0] == "asend2"){
+				if(isset($this->AR["AR"]))
+				{
+					$asr = $this->AR["AR"];
+					if($this->AR[$asr] == 4){
+						$asend = $this->Config->get($asr);
+						$b = $event->getBlock();
+						$asend[12] = $b->x;
+						$asend[13] = $b->y;
+						$asend[14] = $b->z;
+						$this->Config->set($asr, $asend);
+						$this->Config->save();
+						$this->AR[$asr] = 5;
+						$event->setLine(0, "§a§lGoal");
+						$p->sendMessage("§l§aAthleticRace La costruzione del sistema è finita");
+						$this->AP[$asr] = array();
+						$this->AC[$asr] = 0;
+					}else{
+						$p->sendMessage("§l§4Atletica cartello non è installato, o è già Atletica punto di partenza è impostato");
+					}
+				}
+			}
+		}
+	}
+	public function onTap(PlayerInteractEvent $event)
+	{
+		$b = $event->getBlock();
+		$x = $b->x;
+		$y = $b->y;
+		$z = $b->z;
+		$cdt = $this->Config->getAll();
+		$xyz = $x.".".$y.".".$z;
+		if($this->Config->exists($xyz)){
+			$p = $event->getPlayer();
+			$ps = $this->AP[$xyz];
+			$pn = $p->getName();
+			$pnp = $this->getServer()->getPlayer($pn)->getName();
+			if(!isset($ps[0]))
+			{
+				$p->sendMessage("§l§ain attesa sfidante");
+				$ps[0] = $pnp;
+				$this->AC[$xyz] = $this->AC[$xyz] + 1;
+				$this->AP[$xyz] = $ps;
+			}else if(!($ps[0] == $pnp)){
+				$ps[] = $p->getName();
+				$this->AP[$xyz] = $ps;
+				$this->AC[$xyz] = $this->AC[$xyz] + 1;
+				if($this->AC[$xyz] >= 3){
+					$p->sendMessage("§l§4È il numero di persone è troppo!");
+					$this->AC[$xyz] = 2;
+				}else{
+					$p->sendMessage("§l§din attesa sfidante");
+				if($this->AC[$xyz] == 2){
+					$cd = $this->Config->get($xyz);
+					$level = $this->getServer()->getDefaultLevel();
+					$pos = new Position($cd[3], $cd[4], $cd[5], $level);
+					$psp = $this->getServer()->getPlayer($ps[0]);
+					$psp->teleport($pos);
+					$pos = new Position($cd[9], $cd[10], $cd[11], $level);
+					$p->teleport($pos);
+					$this->getServer()->broadcastMessage("§l§a[§4AthleticRace§a] $pn vs ".$psp->getName()." inizia!");
+					$this->status[$xyz] = 0;
+					$this->stat($xyz, 300);
+					}
+				}
+			}else{
+				$p->sendMessage("§l§già in attesa!");
+			}
+		}else{
+			foreach($this->Config->getAll(true) as $xyz1){
+				if(isset($this->AP[$xyz1])){
+					if($this->AC[$xyz1] == 2){
+						$adata = $this->Config->get($xyz1);
+						$xyz2 = $adata[12].".".$adata[13].".".$adata[14];
+						$xyz3 = $adata[6].".".$adata[7].".".$adata[8];
+						//print("$xyz , $xyz2 , $xyz3");
+						if($xyz == $xyz2 || $xyz == $xyz3)
+						{
+							$plnams = $this->AP[$xyz1];
+							$p1 = $this->getServer()->getPlayer($plnams[0]);
+							$p2 = $this->getServer()->getPlayer($plnams[1]);
+							$item = Item::get(388, 0, 1);
+							if($p1->getName() == $event->getPlayer()->getName()){
+								$this->getServer()->broadcastMessage("§l§a[§4AthleticRace§a]".$plnams[0]."Uscire dalla gara di atletica in quanto ha raggiunto l'obiettivo");
+								$p1->sendMessage("Ho avuto lo smeraldo come ricompensa");
+								$this->AC[$xyz1] = 0;
+								$this->AP[$xyz1] = array();
+								$level = $this->getServer()->getDefaultLevel();
+								$pos = new Position(128,5,128,$level);
+								$p1->teleport($pos);
+								if($p1->getInventory()->canAddItem($item)){
+									$p1->getInventory()->addItem($item);
+								}else{
+									$p1->sendMessage("§l§aè stato in grado di aggiungere Smeraldo");
+								}
+								$p2->teleport($pos);
+								$this->status[$xyz1] = 1;
+							}else if($p2->getName() == $event->getPlayer()->getName()){
+								$this->getServer()->broadcastMessage("§l§a[§4AthleticRace§a]".$plnams[1]."HAI VINTO");
+								$p2->sendMessage("§l§bHo avuto lo smeraldo come ricompensa");
+								$this->AC[$xyz1] = 0;
+								$this->AP[$xyz1] = array();
+								$level = $this->getServer()->getDefaultLevel();
+								$pos = new Position(128,5,128, $level);
+								$p1->teleport($pos);
+								if($p2->getInventory()->canAddItem($item)){
+									$p2->getInventory()->addItem($item);
+								}else{
+									$p2->sendMessage("§l§aè stato in grado di aggiungere Smeraldo");
+								}
+								$p2->teleport($pos);
+								$this->status[$xyz1] = 1;
+							}else{
+								$this->getServer()->broadcastMessage("§l§a[§4AthleticRace§a]ERRORE");
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	public function onQuit(PlayerQuitEvent $ev)
+	{
+		$pn = $ev->getPlayer()->getName();
+		$cga = $this->Config->getAll(true);
+		foreach($cga as $xyz){
+			if(isset($this->AP[$xyz]))
+			{
+				$pns = $this->AP[$xyz];
+				if(isset($pns[0]) || isset($pns[1]))
+				{
+					if($pn == $pns[0]){
+						$this->AP[$xyz] = array();
+						$this->AC[$xyz] = 0;
+						if(isset($pns[1])){
+							$this->getServer()->broadcastMessage("§l§a[§4AthleticRace§a]$pn HAI PERSO");
+							$level = $this->getServer()->getDefaultLevel(); 
+							$pos = new Position(128,5,128, $level);
+							$this->getServer()->getPlayer($pns[1])->teleport($pos);
+							$this->status[$xyz] = 1;
+						}	
+					}else{
+					if(isset($pns[1])){ 
+						if($pn == $pns[1]){
+						$this->getServer()->broadcastMessage("§l§a[§4AthleticRace§a]$pn HAI PERSO");
+						$this->AP[$xyz] = array();
+						$this->AC[$xyz] = 0;
+						$pnp = $this->getServer()->getPlayer($pns[0]);
+						$level = $this->getServer()->getDefaultLevel(); 
+						$pos = new Position(128,5,128, $level);
+						$pnp->teleport($pos);
+						$this->status[$xyz] = 1;
+					}
+					}
+					}
+				}
+			}
+		}
+	}
+	public function onDeath(PlayerDeathEvent $event)
+	{
+		$po = $event->getEntity();
+		if($po instanceof Player)
+		{
+			$pn = $po->getName();
+			$cga = $this->Config->getAll(true);
+			foreach($cga as $xyz){
+				if(isset($this->AP[$xyz]))
+				{
+					$pns = $this->AP[$xyz];
+					if(isset($pns[0]) || isset($pns[1]))
+					{
+						if($pn == $pns[0]){
+							$this->AP[$xyz] = array();
+							$this->AC[$xyz] = 0;
+							if(isset($pns[1])){
+								$level = $this->getServer()->getDefaultLevel(); 
+								$pos = new Position(128,5,128, $level);
+								$this->getServer()->getPlayer("$pns[1]")->teleport($pos);
+								$this->getServer()->broadcastMessage("§l§a[§4AthleticRace§a]$pn MORTO");
+								$this->status[$xyz] = 1;
+							}
+						}else{
+						if(isset($pns[1])){
+						if($pn == $pns[1]){
+							$this->getServer()->broadcastMessage("§l§a[§4AthleticRace§a]$pn MORTO");
+							$this->AP[$xyz] = array();
+							$this->AC[$xyz] = 0;
+							$pnp = $this->getServer()->getPlayer($pns[0]);
+							$level = $this->getServer()->getDefaultLevel(); 
+							$pos = new Position(128,5,128, $level);
+							$pnp->teleport($pos);
+							$this->status[$xyz] = 1;
+						}
+						}
+						}
+					}
+				}
+			}
+		}
+	}
+	public function stat($stat, $a)
+	{
+		if(!$a == 0){
+			$a = $a - 1;
+			if($this->status[$stat] == 0){
+			$this->getServer()->broadcastTip("RIMANENTI".$a."SECONDI");
+			}
+			$this->getServer()->getScheduler()->scheduleDelayedTask(new backTask([$this,"stat" ], [$stat, $a]), 20);
+		}else if($a == 0){
+			$pns = $this->AP[$stat];
+			$this->getServer()->broadcastMessage("[AthleticRace]tempo scaduto");
+			if(isset($pns[0])){
+			$p1 = $this->getServer()->getPlayer($pns[0]);
+			$p2 = $this->getServer()->getPlayer($pns[1]);
+			$level = $this->getServer()->getDefaultLevel(); 
+			$pos = new Position(128,5,128, $level);
+			$this->AP[$stat] = array();
+			$this->AC[$stat] = 0;
+			$this->status[$stat] = 1;
+			$p1->teleport($pos);
+			$p2->teleport($pos);
+		}else{
+			$this->getServer()->broadcastMessage("[AthleticRace]ERRORE");
+			$this->status[$stat] = 1;
+		}
+		}
+	}
+}
+class backTask extends Task{
+
+	protected $callable;
+	protected $args;
+
+	public function __construct(callable $callable, array $args = array()){
+		$this->callable = $callable;
+		$this->args = $args;
+		$this->args[] = $this;
+	}
+	public function getCallable(){
+		return $this->callable;
+	}
+
+	public function onRun($currentTicks){
+		call_user_func_array($this->callable, $this->args);
+	}
+
+}

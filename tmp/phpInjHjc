@@ -1,0 +1,85 @@
+name: Nicknames
+version: 1.0.0
+main: Nicknames\Main
+author: Kairus Dark Seeker
+load: POSTWORLD
+api:
+- 1.13.0
+- 2.0.0
+
+permissions:
+  nick:
+    description: "Nicknames by Kairus Dark Seeker! (Twitter: @KairusDS)"
+    children:
+      nick.use:
+        description: "/nickname"
+        default: op
+<?php
+namespace Nicknames;
+use pocketmine\plugin\PluginBase;
+use pocketmine\event\Listener;
+class Main extends PluginBase implements Listener {
+	# Plugin made by Kairus Dark Seeker(Twitter: @KairusDS)
+	
+	private $config;
+	
+	public function onEnable() {
+		$this->getServer()->getPluginManager()->registerEvents($this, $this);
+		$nicknameCommand = new NicknameCommand($this);
+		$this->getServer()->getCommandMap()->register($nicknameCommand->commandName, $nicknameCommand);
+	}
+}
+<?php
+
+namespace Nicknames;
+
+use pocketmine\command\Command;
+use pocketmine\command\PluginIdentifiableCommand;
+use pocketmine\command\CommandSender;
+
+use pocketmine\Player;
+
+class NicknameCommand extends Command implements PluginIdentifiableCommand {
+	private $plugin;
+	
+	public $commandName = "nickname";
+
+	public function __construct(Main $plugin) {
+		parent::__construct($this->commandName, "change your nickname");
+		$this->setUsage("/$this->commandName");
+		
+		$this->plugin = $plugin;
+	}
+
+	public function getPlugin() {
+		return $this->plugin;
+	}
+
+	public function execute(CommandSender $sender, $label, array $args) {
+		if(!$this->plugin->isEnabled()) {
+			return false;
+		}
+		
+		if(!$sender instanceof Player) {
+			$sender->sendMessage("§cPlease use the command in-game");
+			return true;
+		}
+		
+		if(!$sender->hasPermission("nick.use")) {
+		  $sender->sendMessage("§c- No permission to use this command");
+		  return true;
+		}
+		
+		$name = implode(" ", $args);
+		if(trim($name) === ""){
+			$sender->sendMessage("§cUsage: /nickname <name>");
+			return true;
+		}
+		
+		$sender->sendMessage("§a- Successfully set your nickname to $name");
+		$sender->setNameTag($name);
+		$sender->setDisplayName($name);
+		
+		return true;
+	}
+}

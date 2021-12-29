@@ -1,0 +1,74 @@
+name: SClan
+main: Sergey_Dertan\SClan\SClanMainFolder\SClanMain
+version: Beta_2.6
+author: Sergey_Dertan
+load: STARTUP
+website: http://vk.com/superator
+api: 1.9.0
+commands:
+ c:
+  aliases: [clan]
+  permission: sc.clan
+  description: "Команды SClan"
+ cc:
+  permission: sc.clanchat
+  description: "Оправить сообщение в клановый чат"
+permissions:
+ sclan:
+  default: op
+  description: "Максимальные права"
+  children:
+   sc.clan:
+    default: true
+    description: "Разрешить использовать команду '/c'"
+   sc.clan.create:
+    default: true
+    description: "Разрешить создавать клан"
+   sc.clan.remove:
+    default: true
+    description: "Разрешить удалять клан"
+   sc.clan.leave:
+    default: true
+    description: "Разрешить покидать клан"
+   sc.clan.join:
+    default: true
+    description: "Разрешить присоеденяться к клану"
+   sc.clan.invite:
+    default: true
+    description: "Разрешить приглашать в клан"
+   sc.clanchat:
+    default: true
+    description: "Разрешить отправлять сообщения в клановый чат"
+   sc.clan.info:
+    default: true
+    description: "Разрешить просматривать информацию о клане"
+   sc.clan.list:
+    default: true
+    description: "Разрешить просматривать список всех кланов"
+   sc.clan.addmoder:
+    default: true
+    description: "Разрешить добавлять модераторов в клан"
+   sc.clan.removemoder:
+    default: true
+    description: "Разрешить удалять модераторов в клане"
+   sc.clan.sethome:
+    default: true
+    description: "Разрешить создавать клановый дом"
+   sc.clan.removehome:
+    default: true
+    description: "Разрешить удалять клановый дом"
+   sc.clan.home:
+    default: true
+    description: "Разрешить телепортироваться на клановый дом"
+   sc.clan.bug:
+    default: true
+    description: "Разрешить оставлять сообщения о багах"
+   sc.clan.accept:
+    default: true
+    description: "Разрешить принимать приглашения в клан"
+   sc.clan.deny:
+    default: true
+    description: "Разрешить отклонять  приглашения в клан"
+   sc.clan.tag:
+    default: true
+    description: "Разрешить зменять тег клана"

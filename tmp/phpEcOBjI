@@ -1,0 +1,17 @@
+name: Youtuber
+author: Megaplay
+version: 2.0.1
+description: §bKit youtuber
+main: MegaPlay\Main
+api: 2.0.0
+
+commands:
+  youtuber:
+           description: §b§oPegue o kit Youtuber
+           use: "Use /youtuber"
+           permission: youtuber.cmd.usar
+
+permissions:
+    youtuber.cmd.usar:
+        description: Perm para usa o /youtuber
+        default: op

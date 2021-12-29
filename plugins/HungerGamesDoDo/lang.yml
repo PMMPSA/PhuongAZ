@@ -1,0 +1,14 @@
+---
+en:
+  kill: He was killed by
+  cannotjoin: The game has already started.
+  seconds: seconds to start
+  won: Win SkyWars!
+  deathmatchminutes: minutes for the final battle!
+  deathmatchseconds: seconds for the final battle!
+  chestrefill: chest refill!
+  remainingminutes: minutes remaining!
+  remainingseconds: seconds remaining!
+  nowinner: No winners this time!
+  moreplayers: missing players!
+...

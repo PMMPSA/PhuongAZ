@@ -1,0 +1,8 @@
+#Time in between each MOTD Change in seconds
+Occurrence: 15
+
+#Different MOTDs to show
+MOTDS:
+  - "{SERVER_MOTD} &r[&e{TPS}&r] &0- &9Play Here!"
+  - "{SERVER_MOTD} &r[&e{TPS}&r] &0- &9Survival!"
+  - "{SERVER_MOTD} &r[&e{TPS}&r] &0- &9Blocks Blocks Blocks!"

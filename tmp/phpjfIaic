@@ -1,0 +1,24 @@
+name: SWT
+main: SWT\SkyWarsTeam\SkyWarsTeam
+version: 2.0.0
+api: 
+- 1.0.0
+- 1.1.0
+- 2.0.0
+
+commands:
+    stm:
+        usage: /stm <esci-crea>
+        description: SkyWars-Commands
+    lang:
+        usage: /lang <en>
+        description: SkyWars-English-Lang
+    rankstm:
+        usage: /rankstm
+        description: SkyRank-Commands
+    stmstart:
+        usage: /stmstart
+        description: SkyWars-Force start
+    resetmap:
+        usage: /resetmap
+        description: reset-the-map

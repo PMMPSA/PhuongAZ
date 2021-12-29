@@ -1,0 +1,66 @@
+name: xyz
+main: unerds\xyz\xyz
+version: 1.0.1
+api: [1.0.0]
+
+load: POSTWORLD
+author: unerds
+description: command to display player coordinates
+website: github.com/unerds
+commands:
+ xyz:
+  description: Returns Player Coordinates
+  usage: "/xyz"
+  permission: xyz.command.xyz<?php
+
+namespace unerds\xyz;
+
+use pocketmine\plugin\PluginBase;
+use pocketmine\command\Command;
+use pocketmine\command\CommandSender;
+use pocketmine\Player;
+
+
+class xyz extends PluginBase {
+
+	public function onEnable(){
+	$this->getLogger()->info("/xyz enabled.");
+		return true;
+	}
+	
+
+	public function onLoad(){
+		$this->getLogger()->info("/xyz loaded");
+	}
+	
+
+	public function onCommand(CommandSender $sender, Command $command, $label, array $args){
+		switch($command->getName()){
+			case "xyz":
+				if($sender instanceof Player){
+					$playerX = $sender->getX();
+                	$playerY = $sender->getY();
+                	$playerZ = $sender->getZ();
+
+                	$outX=round($playerX,1);
+                	$outY=round($playerY,1);
+                	$outZ=round($playerZ,1);
+
+                	$playerLevel = $sender->getLevel()->getName();
+
+                	$sender->sendMessage("x:" . $outX . ", y:" . $outY . ", z:" . $outZ . ". On: " . $playerLevel);
+					return true;
+				}
+
+				else{
+					$sender->sendMessage("This command only works in-game.");
+            }
+		}
+	}    
+
+	
+    public function onDisable(){
+        $this->getLogger()->info("/xyz disabled.");
+        return true;
+	}
+}

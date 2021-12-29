@@ -1,0 +1,13 @@
+#Plugin 100% PocketMineBrasil By Yodaylay22HD
+name: AdminPainel
+author: Yodaylay22HD
+version: 1.0
+main: AdminPainel\Main
+api:
+- 2.0.0
+- 1.13.0
+- 1.12.0
+commands:
+    admin:
+        description: "Ligar o painel dos admins"
+        permission: admin.painel

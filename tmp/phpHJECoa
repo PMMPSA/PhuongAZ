@@ -1,0 +1,25 @@
+name: BuildUHCJericMD
+main: JMD\BuildUHC\BuildUHC
+author: JMD
+version: 2.2.1
+api: 
+- 1.0.0
+- 1.1.0
+- 2.0.0
+
+commands:
+    buhc:
+        usage: /buhc <leave-make>
+        description: UHC-Commands
+    lang:
+        usage: /lang <en>
+        description: UHC-English-Lang
+    rankbuhc:
+        usage: /rank
+        description: UHCRank-Commands
+    buhcstart:
+        usage: /buhcstart
+        description: BuildUHC-Force start
+    money:
+        usage: /money
+        description: Set-Money-Win

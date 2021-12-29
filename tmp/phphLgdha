@@ -1,0 +1,76 @@
+﻿name: autowalk
+main: autowalk\autowalk
+version: 6.6.6
+api: [1.11.0]
+load: POSTWORLD
+author: tradottoby IlKannibale
+description: CORRIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII<?php
+
+namespace autowalk;
+
+
+   use pocketmine\event\player\PlayerMoveEvent;
+   use pocketmine\math\Vector3;
+   use pocketmine\item\Item;
+   use pocketmine\inventory\Inventory;
+   use pocketmine\event\player\PlayerItemHeldEvent;
+   use pocketmine\event\Listener;
+   use pocketmine\plugin\PluginBase;
+   
+  
+  class autowalk extends PluginBase implements Listener{
+
+   public function onEnable(){
+   
+    $this->getServer()->getPluginManager()->registerEvents($this,$this);
+
+}
+
+
+    public function onHeld(PlayerItemHeldEvent $event){
+
+  $player = $event->getPlayer();
+  
+   $item = $event->getItem()->getID();
+   
+       if($item == 263){
+
+  $player->sendMessage("§asali sul fungo");
+
+  }else{
+
+ }
+}
+
+   public function onMove(PlayerMoveEvent $event){
+
+ 
+
+   $player=$event->getPlayer();	
+	$level=$player->getLevel();	
+
+	$vector=new Vector3($player->getX(),$player->getY()-1,$player->getZ());	
+		$block=$level->getBlock($vector);		
+			$id=$block->getID();
+
+    if($player->getInventory()->getItemInHand()->getID() === 263){
+
+  if($id == 100){
+   
+    $MotionA = new Vector3(0,0,0);
+    $dir = $player->getDirection();
+
+   $move = 3;
+
+ if($dir === 0){$MotionA->x=$move;}
+ if($dir === 1){$MotionA->z=$move;}
+ if($dir === 2){$MotionA->x=-$move;}
+ if($dir === 3){$MotionA->z=-$move;}
+$player->setMotion($MotionA);
+$player->sendPopup("§6CORRI CORRI");
+
+}
+}
+}
+
+}

@@ -1,0 +1,24 @@
+---
+# Register
+
+dangki: §a➡§f Bạn đã đăng kí tài khoản thành công!
+
+# Logout
+
+dangxuat: §a➡§f Bạn đã đăng xuất!
+
+# Login
+
+dangnhap: §a➡§f Bạn đã đăng nhập thành công!
+
+# Message
+
+loichaodangki: §e➡§f Chào mừng người chơi mới! Để đăng ký hãy bấm §e§l/register <Mật khẩu>§r§f hoặc §e§l/register <Mật khẩu> <Email>§r
+
+loichaodangnhap: §e➡§f Chào mừng trở lại! Để đăng nhập hãy bấm §e§l/login <Mật khẩu>§r
+
+# Password not found
+
+saimatkhau: §c✖§f Mật khẩu không đúng !
+
+...

@@ -1,0 +1,6 @@
+name: PvPWorlds
+main: Samueljh1\PvPWorlds\main
+version: 1.0
+api: [1.0.0]
+load: POSTWORLD
+description: Disables PvP on Certain Worlds!

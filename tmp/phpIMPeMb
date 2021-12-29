@@ -1,0 +1,482 @@
+name: ASR
+main: iJoshuaHD\iMCPE\ASR\Loader
+version: 2.0.2
+api: [2.0.0]
+load: STARTUP
+author: iJoshuaHD
+description: Restarts your server at given interval.
+website: https://github.com/iJoshuaHD/ASR
+commands:
+ asr:
+  description: "Set ASR Time"
+  permission: asr.command.asr
+ restart:
+  description: "Check ASR Status"
+  permission: asr.command.restart
+permissions:
+ asr.command.asr:
+  description: "Usage: /asr <value>"
+  default: op
+ asr.command.restart:
+  description: "Usage: /restart"
+  default: true
+<?php
+
+/*
+==================
+
+ASR Plugin by
+iJoshuaHD
+
+==================
+*/
+
+namespace iJoshuaHD\iMCPE\ASR;
+
+use pocketmine\Server;
+use pocketmine\Player;
+
+use pocketmine\command\CommandSender;
+
+use pocketmine\plugin\PluginBase;
+
+use pocketmine\utils\Config;
+use pocketmine\utils\TextFormat;
+
+class Loader extends PluginBase{
+
+	public $count_down = 60; //secs
+	public $time_count = array();
+
+    public function onEnable(){
+		//Commands
+		$this->getCommand("asr")->setExecutor(new Commands($this));
+		$this->getCommand("restart")->setExecutor(new Commands($this));
+		//Task
+		$this->initial_start(2); //its obviously 1 sec but idk why xD
+		//Load Config
+		$this->loadConfigurations();
+	}
+    
+    public function onDisable(){
+		$this->db->closeDatabase();
+    }
+	
+	/***************************
+	*==========================*
+	*====[ External APIs ]=====*
+	*==========================*
+	***************************/
+	
+	public function pluginDisable(){
+		return $this->getServer()->getPluginManager()->disablePlugin($this);
+	}
+	
+	public function getDb(){
+		return $this->db;
+	}
+	
+	public function setValueTimer($value){
+		$this->preferences->set("TimeToRestart", $value);
+		$this->preferences->save();
+	}
+	
+	public function getTimer(){
+		if(isset($this->time_count['time'])){
+			return $this->time_count['time'];
+		}else{
+			$this->setTimer($this->restart_time, "mins.");
+			return $this->time_count['time'];
+		}
+	}
+	
+	public function setTimer($time, $offset){
+		if(isset($this->time_count['time'])){
+			unset($this->time_count['time']);
+			$this->time_count['time'] = "$time $offset";
+		}else{
+			$this->time_count['time'] = "$time $offset";
+		}
+	}
+
+	/*************************
+	*========================*
+	*====[ Plugin APIs ]=====*
+	*========================*
+	*************************/
+	
+	public function initial_start($timer){
+	/*
+	 The Reason of this function is to set an allowance on the main timer not to start once the plugin is enabled.
+	*/
+		if($timer == 1){
+			$this->start($this->restart_time + 1);
+			return;
+		}else{
+			$timer--;
+			$this->getServer()->getScheduler()->scheduleDelayedTask(new CallbackTask([$this,"initial_start" ], [$timer]), 20);
+		}
+	}
+	
+	public function start($time_target){
+		$time_target--;
+		if($time_target == 1) $offset = "min.";
+		else $offset = "mins.";
+		$this->broadcast("Server will restart in $time_target $offset");
+		if($time_target == 1){
+			$this->count_down($this->count_down + 1);
+			return;
+		}
+		$this->setTimer($time_target, $offset);
+		if($time_target < $this->restart_time){
+			$this->db->updateTimestamp();
+		}
+		$this->getServer()->getScheduler()->scheduleDelayedTask(new CallbackTask([$this,"start" ], [$time_target]), 1200);
+	}
+	
+	public function count_down($seconds){
+		if($seconds == 1){
+			foreach($this->getServer()->getOnlinePlayers() as $p){
+				$p->kick("Server Restart");
+			}
+			$this->getServer()->shutdown();
+			return;
+		}else{
+			$seconds--;
+			$this->setTimer($seconds, "secs.");
+			if($seconds == 30) $this->broadcast("Server will restart in $seconds seconds.");
+			if($seconds == 10) $this->broadcast("Server will restart in $seconds seconds.");
+			if($seconds < 6) $this->broadcast("Server will restart in $seconds.");
+			$this->getServer()->getScheduler()->scheduleDelayedTask(new CallbackTask([$this,"count_down" ], [$seconds]), 20);
+		}
+	}
+	
+	/************************
+	*=======================*
+	*====[ Non - APIs ]=====*
+	*=======================*
+	************************/
+	
+	public function broadcast($msg){
+		return $this->getServer()->broadcastMessage($this->prefix . " $msg");
+	}
+	
+	public function loadConfigurations(){
+		if(!file_exists($this->getDataFolder())){
+			$this->getServer()->getLogger()->info(TextFormat::YELLOW . "[ASR] It Seems you're new in using ASR.");
+			$this->getServer()->getLogger()->info(TextFormat::YELLOW . "[ASR] Applying Configurations [...]");
+			@mkdir($this->getDataFolder(), 0777, true);
+			$this->preferences = new Config($this->getDataFolder() . "config.yml", Config::YAML);
+			$this->preferences->set("Version", "2.0.1");
+			$this->preferences->set("TimeToRestart", 30);
+			$this->preferences->set("Prefix", "[ASR]");
+			$this->preferences->set("Logger_DB", false);
+			$this->preferences->save();
+			$this->getServer()->getLogger()->info(TextFormat::AQUA . "[ASR] Note: Logger is disabled by default.");
+			$this->getServer()->getLogger()->info(TextFormat::BLUE . "[ASR] You can Enable it by editing the config.yml");
+			$this->getServer()->getLogger()->info(TextFormat::AQUA . "[ASR] If you have enabled Logger, please");
+			$this->getServer()->getLogger()->info(TextFormat::BLUE . "[ASR] use the proper MySQL Server info otherwise plugin wont work.");
+			$this->getServer()->getLogger()->info(TextFormat::GREEN . "[ASR] Done!");
+		}else{
+		/*	This would be useful when I make some further updates e.g. Multi Lingual Support. 
+			If you are worrying about if there's version 3.0.0 or more, don't worry, I'll deal
+			with it :)	*/
+			$this->preferences = new Config($this->getDataFolder() . "config.yml", Config::YAML);
+			$version = $this->preferences->get("Version");
+			$checker = $this->preferences->get("Logger_DB");
+			if($version !== "2.0.1" and $version == "2.0.0"){
+				$this->getServer()->getLogger()->info(TextFormat::YELLOW . "[ASR] It Seems you're using v$version of ASR.");
+				$this->getServer()->getLogger()->info(TextFormat::YELLOW . "[ASR] Applying Configuration Updates for v2.0.1 [...]");
+				$this->preferences->set("Version", "2.0.1");
+				$this->preferences->set("Logger_DB", false);
+				$this->preferences->save();
+				$this->getServer()->getLogger()->info(TextFormat::GREEN . "[ASR] Done!");
+			}else{
+				if($version !== "2.0.1" and $version !== "2.0.0"){
+					$this->getServer()->getLogger()->info(TextFormat::YELLOW . "[ASR] It Seems you're using an older version of ASR.");
+					$this->getServer()->getLogger()->info(TextFormat::YELLOW . "[ASR] Applying Configuration Updates [...]");
+					$this->preferences->set("Version", "2.0.1");
+					$this->preferences->set("TimeToRestart", 30);
+					$this->preferences->set("Prefix", "[ASR]");
+					$this->preferences->set("Logger_DB", false);
+					$this->preferences->save();
+					$this->getServer()->getLogger()->info(TextFormat::GREEN . "[ASR] Done!");
+				}
+			}
+			if($checker == true){
+				$this->getServer()->getLogger()->info(TextFormat::BLUE . "[ASR] You have Logger ENABLED, please use");
+				$this->getServer()->getLogger()->info(TextFormat::AQUA . "[ASR] the proper MySQL Server info otherwise plugin wont work.");
+			}else{
+				$this->getServer()->getLogger()->info(TextFormat::RED . "[ASR] Logger is DISABLED.");
+			}
+		}
+		if(!file_exists($this->getDataFolder() . "connector.yml")){
+			$this->saveResource("connector.yml");
+		}
+		$this->cfg = new Config($this->getDataFolder() . "connector.yml", Config::YAML);
+		$this->restart_time = $this->preferences->get("TimeToRestart");
+		$this->prefix = $this->preferences->get("Prefix");
+		$this->db = new Database($this); //connection with database
+		$this->db->loadDatabase();
+	}
+}
+<?php
+
+namespace iJoshuaHD\iMCPE\ASR;
+
+use pocketmine\Player;
+use pocketmine\IPlayer;
+
+use pocketmine\command\Command;
+use pocketmine\command\CommandExecutor;
+use pocketmine\command\CommandSender;
+use pocketmine\command\ConsoleCommandSender;
+
+use pocketmine\utils\TextFormat;
+
+class Commands implements CommandExecutor{
+
+	public function __construct(Loader $plugin){
+		$this->plugin = $plugin;
+	}
+	
+	public function onCommand(CommandSender $sender, Command $command, $label, array $args){
+		switch(strtolower($command->getName())){
+		
+			case "asr":
+				if(isset($args[0])){
+					if(!is_numeric($args[0])){
+						$sender->sendMessage("[ASR] Only Numbers is prohibited.");
+						return;
+					}
+					if($args[0] > 60){
+						$sender->sendMessage("[ASR] It's not advised the value would be more than 60. If you want to increase it, edit the config.yml instead as this plugin won't allow you to set the value more than the said value because it's not prescribed.");
+						$sender->sendMessage("[ASR] Only Numbers is prohibited.");
+						return;
+					}
+					$this->plugin->setValueTimer($args[0]);
+					$sender->sendMessage("[ASR] You have set the timer to " . $args[0] . " min/s. The changes will apply after the next server restart.");
+				}else{
+					$sender->sendMessage("Usage: /asr <value>");
+				}
+			break;
+		
+			case "restart":
+				$time = $this->plugin->getTimer();
+				$sender->sendMessage("[ASR] The server will restart in $time");
+			break;
+		
+		}
+		
+	}
+
+}
+<?php
+
+/*
+ *
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
+ * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * @author PocketMine Team
+
+ *
+ *
+*/
+
+namespace iJoshuaHD\iMCPE\ASR;
+
+use pocketmine\scheduler\Task;
+
+class CallbackTask extends Task{
+
+	/** @var callable */
+	protected $callable;
+
+	/** @var array */
+	protected $args;
+
+	/**
+	 * @param callable $callable
+	 * @param array    $args
+	 */
+	public function __construct(callable $callable, array $args = array()){
+		$this->callable = $callable;
+		$this->args = $args;
+		$this->args[] = $this;
+	}
+
+	/**
+	 * @return callable
+	 */
+	public function getCallable(){
+		return $this->callable;
+	}
+
+	public function onRun($currentTicks){
+		call_user_func_array($this->callable, $this->args);
+	}
+
+}
+---
+MySQL Details:
+ host: 127.0.0.1
+ port: 3306
+ user: your-username
+ password: your-password
+ database: your-database
+...
+<?php
+
+namespace iJoshuaHD\iMCPE\ASR;
+
+use pocketmine\utils\TextFormat;
+
+use iJoshuaHD\iMCPE\ASR\Loader;
+
+class Database{
+
+	private $db;
+
+	public function __construct(Loader $plugin){
+		$this->plugin = $plugin;
+	}
+	
+	public function loadDatabase(){
+		if($this->plugin->preferences->get("Logger_DB") == true){
+			$mysql = $this->plugin->cfg->get("MySQL Details");
+			$mysql_hostname = $mysql["host"];
+			$mysql_port = $mysql["port"];
+			$mysql_user = $mysql["user"];
+			$mysql_password = $mysql["password"];
+			$mysql_database = $mysql["database"];
+		
+			$this->db = @new \mysqli($mysql_hostname, $mysql_user, $mysql_password, $mysql_database, $mysql_port);
+			$this->db_check = @fsockopen($mysql_hostname, $mysql_port, $errno, $errstr, 5);
+			
+			$this->plugin->getLogger()->info("Connecting to MySQL Database ...");
+
+			if (!$this->db_check){
+				$this->plugin->getLogger()->critical("Cant find MySQL Server running.");
+				$this->plugin->getLogger()->info("Disabling the plugin...");
+				$this->plugin->pluginDisable();
+				fclose($this->db_check);
+			}
+			else{
+				if($this->db->connect_error){
+					$this->plugin->getLogger()->critical($this->db->connect_error);
+					$this->plugin->getLogger()->info("Disabling the plugin...");
+					$this->plugin->pluginDisable();
+					fclose($this->db_check);
+				}else{
+					$this->plugin->getLogger()->info(TextFormat::BLUE ."MySQL Status: " . TextFormat::GREEN . "Connected!");
+					
+					/* Creating Dependencies if not exist */
+			
+					$exists_table_asr = $this->db->query("SELECT * FROM asr_logger LIMIT 0");
+
+					if(!$exists_table_asr){
+						$this->plugin->getLogger()->critical("ASR Logger table doesnt exist.");
+						$this->plugin->getLogger()->info("Generating table ...");
+						$sql_123 = "CREATE TABLE IF NOT EXISTS asr_logger(
+									port		VARCHAR(5) NOT NULL,
+									processid	VARCHAR(30) NOT NULL,
+									timestamp	INT(11) NOT NULL
+									) ENGINE=INNODB;";
+						$res = $this->db->query($sql_123);
+						if($res){
+							$this->plugin->getLogger()->info(TextFormat::YELLOW ."Successfully created \"asr_logger\" table!");
+						}
+					}
+					$port = $this->plugin->getServer()->getPort();
+					$processid = getmypid();
+					$result = $this->db->query("SELECT port FROM asr_logger WHERE port='$port'")->fetch_assoc();
+					$current = intval(time());
+					if(!$result){
+						$this->plugin->getLogger()->info(TextFormat::YELLOW ."Adding new processID for PORT: $port ...");
+						$temp = $this->db->query("INSERT INTO asr_logger(port, processid, timestamp)VALUES('$port','$processid','$current')");
+						if($temp) $this->plugin->getLogger()->info(TextFormat::GREEN ."SUCCESS!");
+					}else{
+						$this->plugin->getLogger()->info(TextFormat::YELLOW ."Updating new processID for PORT: $port ...");
+						$temp = $this->db->query("UPDATE asr_logger SET processid='$processid', timestamp='$current' WHERE port='$port'");
+						if($temp) $this->plugin->getLogger()->info(TextFormat::GREEN ."SUCCESS!");
+					}
+					
+					/* Creating Dependencies if not exist */
+					
+				}
+			}
+			
+		}
+	}
+	
+	public function updateTimestamp(){
+		if($this->plugin->preferences->get("Logger_DB") == true){
+			$port = $this->plugin->getServer()->getPort();
+			$current = intval(time());
+			$temp = $this->db->query("UPDATE asr_logger SET timestamp='$current' WHERE port='$port'");
+			if($temp) $this->plugin->getLogger()->info(TextFormat::GREEN ."Timestamp has been Updated.");
+		}
+	}
+	
+	public function closeDatabase(){
+		if($this->plugin->preferences->get("Logger_DB") == true){
+			if ($this->db_check){
+				if(!$this->db->connect_error) $this->db->close();
+			}
+		}	
+	}
+	
+	public function getQueryAndInsertID($query){
+		if($value = $this->db->query($query)) return $this->db->insert_id;
+	}
+
+	public function getQuery($query){
+		$result = $this->db->query($query);
+		if(!$result){
+			return false;
+		}else{
+			return true;
+		}
+	}
+	
+	public function getFetchAssoc($query){
+		$result = $this->db->query($query);
+		if(!$result){
+			return false;
+		}else{
+			return $result->fetch_assoc();
+		}
+	}
+	
+	public function getFetchRow($query){
+		$result = $this->db->query($query);
+		if(!$result){
+			return false;
+		}else{
+			return $result->fetch_row();
+		}
+	}
+	
+	public function getFetchArray($query){
+		$result = $this->db->query($query);
+		if(!$result){
+			return false;
+		}else{
+			return $result->fetch_array();
+		}
+	}
+	
+	public function countNumRows($query){
+		$result = $this->db->query($query);
+		return $result->num_rows;
+	}
+}

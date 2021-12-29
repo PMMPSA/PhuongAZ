@@ -1,0 +1,14 @@
+name: xyz
+main: unerds\xyz\xyz
+version: 1.0.1
+api: [1.0.0]
+
+load: POSTWORLD
+author: unerds
+description: command to display player coordinates
+website: github.com/unerds
+commands:
+ xyz:
+  description: Returns Player Coordinates
+  usage: "/xyz"
+  permission: xyz.command.xyz

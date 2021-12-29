@@ -1,0 +1,15 @@
+#To disable one of these just delete the message between ' ' , not the whole line
+#You can use " @ " to set colors
+---
+sign.game_full: '@cThis arena is full, please wait'
+sign.game_running: '@cThe game is running, please wait'
+game.join: '@f{PLAYER} @ejoined the game @b{COUNT}'
+popup.countdown: '@bThe game starts in @f{N}'
+chat.countdown: '@7The game starts in @b{N}'
+game.start: '@dThe game start now, good luck !'
+player.kill: '@f{PLAYER} @cwas killed by @f{KILLER} @b{COUNT}'
+void.kill: '@f{PLAYER} @cwas killed by @fVOID @b{COUNT}'
+game.left: '@7{PLAYER} left the game @b{COUNT}'
+game.chest_refill: '@aChests has been refilled !'
+server.broadcast_winner: '@f{PLAYER} @ewon the game on @bSky@6Wars: @f{SWNAME}'
+...

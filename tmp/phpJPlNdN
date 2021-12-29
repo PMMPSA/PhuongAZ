@@ -1,0 +1,6 @@
+name: KillMoney
+author: ElGears
+version: 1.5
+description: Da a los jugadores el dinero cuando matan a otro jugador
+main: \KillMoney\Main
+api: [1.8.0]

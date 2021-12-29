@@ -1,0 +1,6 @@
+name: AutoInv
+main: autoinv\AutoInv
+version: 1.0.1
+api: [1.12.0, 1.13.0]
+author: HotshotHD
+description: items go straight into player's inventory when they break blocks

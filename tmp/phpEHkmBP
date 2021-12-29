@@ -1,0 +1,6 @@
+name: ArrowExplode
+main: AE\AE
+version: 1.0.0
+api: [2.0.0]
+load: POSTWORLD
+author: Hamooz001,YOUSEEFXCRAFT

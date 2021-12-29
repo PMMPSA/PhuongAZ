@@ -1,0 +1,1004 @@
+name: BuyCraft
+main: buycraft\BuyCraft
+version: 1.2.2
+author: Falkirks
+api: [1.0.0]
+load: POSTWORLD
+permissions:
+ buycraft:
+  default: op
+  description: Top level BuyCraft permission
+  children:
+   buycraft.admin:
+    default: op
+   buycraft.buy:
+    default: true
+<?php
+namespace buycraft;
+
+use buycraft\commands\BuyCommand;
+use buycraft\commands\BuyCraftCommand;
+use buycraft\packages\PackageManager;
+use buycraft\task\AuthenticateTask;
+use buycraft\task\CommandDeleteTask;
+use buycraft\task\CommandExecuteTask;
+use buycraft\task\PendingPlayerCheckerTask;
+use buycraft\util\BuycraftCommandSender;
+use pocketmine\plugin\PluginBase;
+
+class BuyCraft extends PluginBase{
+    /*
+     * If you want to turn debugging on set this to true.
+     */
+    const IS_DEBUGGING = false;
+
+    private $isAuthenticated = false;
+    /** @var  CommandExecuteTask */
+    private $commandExecuteTask;
+    /** @var  PendingPlayerCheckerTask */
+    private $pendingPlayerCheckerTask;
+    /** @var  CommandDeleteTask */
+    private $commandDeleteTask;
+    /** @var BuyCraftCommand */
+    private $buycraftCommand;
+    /** @var  BuyCommand */
+    private $buyCommand;
+    /** @var  BuycraftCommandSender */
+    private $commandSender;
+    /** @var  PackageManager */
+    private $packageManager;
+    /** @var array  */
+    private $authPayload = [];
+    public function onEnable(){
+        $this->saveDefaultConfig();
+        $this->saveResource("README.md");
+        $this->getConfig(); //Fetch the config so no blocking later
+
+        $this->commandSender = new BuycraftCommandSender;
+        $this->commandExecuteTask = new CommandExecuteTask($this);
+        $this->pendingPlayerCheckerTask = new PendingPlayerCheckerTask($this);
+        $this->commandDeleteTask = new CommandDeleteTask($this);
+        $this->commandExecuteTask->call();
+        $this->pendingPlayerCheckerTask->call();
+        $this->commandDeleteTask->call();
+
+        $this->packageManager = new PackageManager($this);
+
+        $this->buyCommand = new BuyCommand($this);
+        $this->buycraftCommand = new BuyCraftCommand($this);
+
+        $this->getServer()->getCommandMap()->register("buycraft", $this->buycraftCommand);
+        $this->getServer()->getCommandMap()->register("buycraft", $this->buyCommand);
+
+        if($this->getConfig()->get('secret') !== ""){
+            $auth = new AuthenticateTask($this);
+            $auth->call();
+        }
+        else{
+            $this->getLogger()->info("You still need to configure BuyCraft. Use /buycraft secret or the config.yml to set your secret.");
+        }
+    }
+    public function onDisable(){
+        $this->commandDeleteTask->onRun(0);
+    }
+    /**
+     * @return CommandDeleteTask
+     */
+    public function getCommandDeleteTask(){
+        return $this->commandDeleteTask;
+    }
+
+    /**
+     * @return CommandExecuteTask
+     */
+    public function getCommandExecuteTask(){
+        return $this->commandExecuteTask;
+    }
+
+    /**
+     * @return PendingPlayerCheckerTask
+     */
+    public function getPendingPlayerCheckerTask(){
+        return $this->pendingPlayerCheckerTask;
+    }
+    /**
+     * @return BuyCommand
+     */
+    public function getBuyCommand(){
+        return $this->buyCommand;
+    }
+
+    /**
+     * @return BuyCraftCommand
+     */
+    public function getBuycraftCommand(){
+        return $this->buycraftCommand;
+    }
+
+    /**
+     * @return BuycraftCommandSender
+     */
+    public function getCommandSender(){
+        return $this->commandSender;
+    }
+
+    /**
+     * @return PackageManager
+     */
+    public function getPackageManager(){
+        return $this->packageManager;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isAuthenticated(){
+        return $this->isAuthenticated;
+    }
+    public function setAuthenticated(){
+        $this->isAuthenticated = true;
+    }
+    public function setUnAuthenticated(){
+        $this->isAuthenticated = false;
+    }
+    public function setAuthPayload(array $authPayload){
+        if(isset($authPayload["buyCommand"])){
+            $this->buyCommand->updateCommand($authPayload["buyCommand"]);
+        }
+        $this->authPayload = $authPayload;
+    }
+    public function getAuthPayload(){
+        return $this->authPayload;
+    }
+    public function getAuthPayloadSetting($name){
+        return (isset($this->authPayload[$name]) ? $this->authPayload[$name] : false);
+    }
+}#  ____               _____            __ _
+# |  _ \             / ____|          / _| |
+# | |_) |_   _ _   _| |     _ __ __ _| |_| |_
+# |  _ <| | | | | | | |    | '__/ _` |  _| __|
+# | |_) | |_| | |_| | |____| | | (_| | | | |_
+# |____/ \__,_|\__, |\_____|_|  \__,_|_|  \__|
+#               __/ |
+#              |___/
+
+# Secret provided by buycraft.net
+secret: ""
+# Not Supported
+autoUpdate: false
+# Enable command checking
+commandChecker: true
+# Use HTTPS for connections
+https: false
+# Disable usage of /buy
+disableBuyCommand: false
+# Change command for /buy
+buyCommand: buy
+# Not Supported (Just boost the debug level)
+debug: false
+# Max commands to pull from API
+commandThrottleCount: 150
+# Prevent setting of secret
+disable-secret-command: false
+# Point players to directly to payment screen
+directPay: false
+# Amount of packages to show per page
+packagePageSize: 5
+
+#  _
+# | |
+# | |     __ _ _ __   __ _
+# | |    / _` | '_ \ / _` |
+# | |___| (_| | | | | (_| |
+# |______\__,_|_| |_|\__, |
+#                     __/ |
+#                    |___/
+# Not all of these are currently used
+
+invalidBuyCommand: "Please enter the correct command parameters."
+urlError: "Failed to generate the shortened URL."
+chatEnabled: "Your chat is now enabled."
+chatAlreadyEnabled: "Your chat is already enabled."
+commandsExecuted: "Your purchased packages have been credited."
+pleaseVisit: "Please click the link below to continue"
+turnChatBackOn: "Type /ec to turn your chat back on."
+packageNotFound: "Package not found."
+noPackagesForSale: "We currently do not have any packages for sale."
+toPurchase: "To purchase a package, please type"
+howToNavigate: "Browse through our packages by using"
+packageId: "ID"
+packageName: "Name"
+packagePrice: "Price"
+pageNotFound: "Page not found."
+categoryMenu: "Category Menu"
+inventoryMenuPrefix: "Buycraft"
+chooseACategory: "Choose a category"
+category: "Category"
+inventoryMenuNotReady: "The inventory menu has not been loaded yet. Please wait."
+nextPage: "Next Page"
+previousPage: "Previous Page"
+homePage: "Back to categories"
+commandExecuteNotEnoughFreeInventory: "%d free inventory slot(s) are required."
+commandExecuteNotEnoughFreeInventory2: "Please empty your inventory to receive these items."---- DISCLAIMER ------------------------
+
+This is a plugin port of the BuyCraft plugin for Bukkit. The port was done using the BuyCraft source
+and implements licensed BuyCraft features. The BuyCraft source has been used sparingly and all code has
+been written from scratch .
+
+YOU ARE WHOLLY RESPONSIBLE FOR YOUR USAGE OF THIS PLUGIN. IF YOU ARE DISAGREE TO THIS
+PLEASE REMOVE THE PLUGIN.
+
+THIS PLUGIN IS NOT ENDORSED OR SUPPORTED IN ANY WAY BY BUYCRAFT, IT'S SUBSIDIARIES OR IT'S PARTNERS.
+
+---- Buycraft Plugin ------------------------
+
+For setup instructions please visit https://buycraft.net.
+
+Upgrade your account and receive many more awesome features by going to https://server.buycraft.net/plans.
+
+
+--- INSTALLATION -----------------------------------------------------------
+
+Please run the command "/buycraft secret <Secret key>" in the console. To find your 
+secret key, go to http://server.buycraft.net and visit the servers page under the webstore 
+section. Refer to installation videos and tutorials available on http://buycraft.net for more help/info.
+
+---- RECENT PAYMENT SIGNS --------------------------------------------------
+
+This port does not support recent payment signs.
+
+---- PERMISSION NODES -----------------------------------------------------
+
+Listed below are the permission nodes for the plugin:
+
+	buycraft.admin - Enables use of the "/buycraft <reload/forcecheck/secret>" commands<?php
+namespace buycraft\util;
+
+use pocketmine\command\ConsoleCommandSender;
+
+class BuycraftCommandSender extends ConsoleCommandSender{
+    public function getName(){
+        return "BUYCRAFT";
+    }
+    public function sendMessage($message){
+
+    }
+}<?php
+namespace buycraft\task;
+
+
+/*
+ * Executes commands from command queue and marks them for deletion.
+ *
+ * Also retains credited commands and unsuccessful commands for reporting to user.
+ */
+
+use buycraft\api\ApiTask;
+use buycraft\util\PackageCommand;
+use pocketmine\item\Block;
+
+class CommandExecuteTask extends ApiTask{
+    /** @var PackageCommand[] */
+    private $commandQueue = [];
+    private $creditedCommands = [];
+    /** @var PackageCommand[] */
+    private $needsInventorySpace = [];
+    public function onRun($tick){
+        if(count($this->commandQueue) > 0){
+            foreach($this->commandQueue as $i => $command){
+                if($command->getDelay() === 0){
+                    if($command->requiresInventorySlots()){
+                        if($command->getRequiredInventorySlots($this->getOwner()->getServer()->getPlayerExact($command->getUser())) > 0){
+                            $this->needsInventorySpace[] = $command;
+                            $this->commandQueue[$i]->setDelay(10);
+                            continue;
+                        }
+                    }
+                    $this->getOwner()->getServer()->dispatchCommand($this->getOwner()->getCommandSender(), $command->getReplacedCommand());
+                    $this->getOwner()->getCommandDeleteTask()->deleteCommand($command->getCommandID());
+                    $this->creditedCommands[$command->getUser()] = true;
+                    unset($this->commandQueue[$i]);
+                }
+                else{
+                    $command->delayTick();
+                }
+            }
+        }
+        foreach($this->creditedCommands as $i => $command){
+            $p = $this->getOwner()->getServer()->getPlayerExact($i);
+            if($p !== null && $p->isOnline()){
+                $p->sendMessage($this->getOwner()->getConfig()->get('commandsExecuted'));
+                unset($this->creditedCommands[$i]);
+            }
+        }
+        foreach($this->needsInventorySpace as $i => $command){
+            $p = $this->getOwner()->getServer()->getPlayerExact($command->getUser());
+            if($p !== null && $p->isOnline()){
+                $p->sendMessage(sprintf($this->getOwner()->getConfig()->get('commandExecuteNotEnoughFreeInventory'), $command->getRequiredInventorySlots($p))); //Not sure if that is right
+                $p->sendMessage($this->getOwner()->getConfig()->get('commandExecuteNotEnoughFreeInventory2'));
+                unset($this->needsInventorySpace[$i]);
+            }
+        }
+    }
+    public function call(){
+        $this->getScheduler()->scheduleRepeatingTask($this, 20);
+    }
+    public function queueCommand(PackageCommand $command){
+        if(!$this->getOwner()->getCommandDeleteTask()->isQueued($command->getCommandID()) && !$this->isQueued($command->getCommandID())){
+            $this->commandQueue[$command->getCommandID()] = $command;
+            return true;
+        }
+        else{
+            return false;
+        }
+    }
+    public function isQueued($cid){
+        foreach($this->commandQueue as $command){
+            if($command->getCommandID() === $cid){
+                return true;
+            }
+        }
+        return false;
+    }
+}<?php
+namespace buycraft\api;
+use buycraft\BuyCraft;
+use buycraft\util\DebugUtils;
+use buycraft\util\HTTPUtils;
+use pocketmine\Player;
+use pocketmine\scheduler\PluginTask;
+use pocketmine\utils\Utils;
+
+/**
+ * Class ApiTask
+ * @package buycraft\api
+ */
+abstract class ApiTask extends PluginTask{
+    /**
+     * @param BuyCraft $main
+     * @param Player $manual
+     * @param array $data
+     */
+    public function __construct(BuyCraft $main, $data = []){
+        parent::__construct($main);
+        DebugUtils::construct($this);
+        if($main->getConfig()->get("https")){
+            $this->apiUrl = "https://api.buycraft.net/v4";
+        }
+        else{
+            $this->apiUrl = "http://api.buycraft.net/v4";
+        }
+        $this->data = $data;
+    }
+
+    /**
+     * @return array
+     */
+    public function getData(){
+        return $this->data;
+    }
+    /**
+     * @return mixed
+     */
+    public function send(){
+        if($this->getOwner()->isAuthenticated()){
+            $this->data["secret"] = $this->getOwner()->getConfig()->get('secret');
+            $this->data["playersOnline"] = count($this->getOwner()->getServer()->getOnlinePlayers());
+            $url = $this->apiUrl . "?" . http_build_query($this->getData());
+            DebugUtils::requestOut($this, $url);
+            return json_decode(HTTPUtils::getURL($url), true);
+        }
+        else{
+            return false;
+        }
+    }
+    /**
+     * @return \pocketmine\scheduler\ServerScheduler
+     */
+    public function getScheduler(){
+        return $this->getOwner()->getServer()->getScheduler();
+    }
+
+    /**
+     * @return mixed
+     */
+    abstract public function call();
+}<?php
+namespace buycraft\util;
+
+use buycraft\BuyCraft;
+
+class DebugUtils{
+    /*
+     * If you want to turn debugging on set this to true.
+     */
+    const IS_DEBUGGING = false;
+    /*
+     * The below fields modify debugging behavior, they
+     * won't do anything unless debugging is enabled above
+     * or in buycraft\BuyCraft
+     */
+    const WRITE_TO_FILE = true;
+    const ECHO_TO_CONSOLE = true;
+    public static function message($str){
+        if(DebugUtils::isDebugging()){
+            if(DebugUtils::ECHO_TO_CONSOLE) {
+                print $str . "\n";
+            }
+            if(DebugUtils::WRITE_TO_FILE){
+                file_put_contents("buycraft.log", $str . "\n", FILE_APPEND | LOCK_EX);
+            }
+        }
+    }
+    public static function construct($class){
+        DebugUtils::message("Constructed " . get_class($class));
+    }
+    public static function taskRegistered($class){
+        DebugUtils::message("Registered " . get_class($class));
+    }
+    public static function taskCalled($class){
+        DebugUtils::taskRunning($class);
+    }
+    public static function taskRunning($class){
+        DebugUtils::message("Running " . get_class($class));
+    }
+    public static function taskComplete($class){
+        DebugUtils::message("Completed " . get_class($class));
+    }
+    public static function requestOut($class, $url = "N/A"){
+        DebugUtils::message("Outgoing request from " . get_class($class) . " to " . $url);
+    }
+    public static function isDebugging(){
+        return BuyCraft::IS_DEBUGGING || DebugUtils::IS_DEBUGGING;
+    }
+}<?php
+namespace buycraft\task;
+
+use buycraft\api\Actions;
+use buycraft\api\ApiTask;
+use buycraft\util\DebugUtils;
+use pocketmine\event\Listener;
+use pocketmine\event\player\PlayerJoinEvent;
+use pocketmine\scheduler\PluginTask;
+use pocketmine\scheduler\TaskHandler;
+
+/*
+ * Does NOT perform any API communication, uses another task.
+ */
+class PendingPlayerCheckerTask extends PluginTask implements Listener{
+    private $pendingPlayers = [];
+    /** @var  TaskHandler */
+    private $handler;
+    public function onRun($tick, $manual = false){
+        DebugUtils::taskCalled($this);
+        if($this->getOwner()->getConfig()->get('commandChecker') || $manual){
+            $task = new PendingUsersTask($this->getOwner());
+            $task->call();
+        }
+    }
+    public function call(){
+        DebugUtils::taskRegistered($this);
+        $this->getOwner()->getServer()->getPluginManager()->registerEvents($this, $this->getOwner());
+        $this->handler = $this->getOwner()->getServer()->getScheduler()->scheduleRepeatingTask($this, 40);
+    }
+    public function onPlayerJoin(PlayerJoinEvent $event){
+        if(isset($this->pendingPlayers[$event->getPlayer()->getName()])){
+            $fetch = new CommandFetchTask($this->getOwner(), ["users" => [$event->getPlayer()->getName()], "offlineCommands" => false]);
+            $fetch->call();
+            unset($this->pendingPlayers[$event->getPlayer()->getName()]);
+        }
+    }
+    public function resetPendingPlayers(){
+        $this->pendingPlayers = [];
+    }
+    public function addPendingPlayer($name){
+        $this->pendingPlayers[] = $name;
+    }
+    public function setUpdateInterval($interval){
+        $this->handler->cancel();
+        $this->handler = $this->getOwner()->getServer()->getScheduler()->scheduleRepeatingTask($this, $interval);
+    }
+}<?php
+namespace buycraft\task;
+
+
+/*
+ * Clears processed commands from buycraft.net.
+ *
+ * MUST be run on shutdown, to prevent repeated execution.
+ */
+
+use buycraft\api\Actions;
+use buycraft\api\ApiTask;
+use buycraft\util\DebugUtils;
+
+class CommandDeleteTask extends ApiTask{
+    private $deleteQueue = [];
+    public function onRun($tick){
+        DebugUtils::taskCalled($this);
+        if(count($this->deleteQueue) > 0){
+            $this->data["commands"] = json_encode($this->deleteQueue);
+            $this->send();
+            $this->deleteQueue = [];
+        }
+    }
+    public function call(){
+        DebugUtils::taskRegistered($this);
+        $this->data["action"] = Actions::COMMANDS;
+        $this->data["do"] = Actions::DO_REMOVE;
+        $this->getScheduler()->scheduleRepeatingTask($this, 20);
+    }
+    public function isQueued($cid){
+        return in_array($cid, $this->deleteQueue);
+    }
+    public function deleteCommand($cid){
+        if(!$this->isQueued($cid)){
+            $this->deleteQueue[] = $cid;
+        }
+    }
+}<?php
+namespace buycraft\api;
+
+
+class Actions{
+    const PLUGIN_VERSION = "6.7";
+
+    const AUTHENTICATE = "info";
+    const CATEGORIES = "categories";
+    const URL = "url";
+    const PACKAGES = "packages";
+    const PAYMENTS = "payments";
+    const PENDING_PLAYERS = "pendingUsers";
+    const COMMANDS = "commands";
+        const DO_LOOKUP = "lookup";
+        const DO_REMOVE = "removeId";
+}<?php
+namespace buycraft\packages;
+
+use buycraft\BuyCraft;
+
+class PackageManager{
+    /** @var  Category[] */
+    private $categories;
+    /** @var  Package[] */
+    private $packages;
+    public function __construct(BuyCraft $main){
+        $this->main = $main;
+        $this->categories = [];
+        $this->packages = [];
+        $this->pageSize = $this->main->getConfig()->get('packagePageSize');
+    }
+    public function addCategory($id, $name, $desc, $item){
+        $this->categories[] = new Category($id, $name, $desc, $item, count($this->categories));
+    }
+    public function addPackage($categoryId, $id, $item, $name, $desc, $price){
+        $category = $this->getCategoryById($categoryId);
+        if($category instanceof Category){
+            $this->packages[] = new Package($id, $name, $desc, $price, $item, $category);
+        }
+        else{
+            $this->packages[] = new Package($id, $name, $desc, $price, $item);
+        }
+    }
+    public function cleanCategories(){
+        foreach($this->categories as $i => $c){
+            if(count($c->getPackages()) == 0){
+                unset($this->categories[$i]);
+            }
+        }
+        foreach($this->packages as $i => $p){
+            $p->setNiceId($i);
+        }
+    }
+    public function getCategories(){
+        return $this->categories;
+    }
+    public function getCategory($niceId){
+        return (isset($this->categories[$niceId]) ? $this->categories[$niceId] : false);
+    }
+    public function getCategoryById($id){
+        foreach($this->getCategories() as $category){
+            if($category->getId() === $id){
+                return $category;
+            }
+        }
+        return false;
+    }
+    public function getPackages(){
+        return $this->packages;
+    }
+    public function getPackage($niceId){
+        return (isset($this->packages[$niceId]) ? $this->packages[$niceId] : false);
+    }
+    public function getPage($page = 0, $category = 0){
+        $start = $page * $this->pageSize;
+        if($category === false){
+            $outArray = array_slice($this->getPackages(), $start, $this->pageSize);
+        }
+        elseif($this->getCategory($category) instanceof Category){
+            $outArray = array_slice($this->getCategory($category)->getPackages(), $start, $this->pageSize);
+        }
+        else{
+            $outArray = false;
+        }
+        return $outArray;
+    }
+    public function reset(){
+        $this->categories = [];
+        $this->packages = [];
+    }
+}<?php
+namespace buycraft\commands;
+
+use buycraft\BuyCraft;
+use buycraft\task\VisitLinkTask;
+use pocketmine\command\Command;
+use pocketmine\command\CommandSender;
+use pocketmine\command\PluginIdentifiableCommand;
+use pocketmine\Player;
+
+class BuyCommand extends Command implements PluginIdentifiableCommand{
+    private $main;
+    public function __construct(BuyCraft $main){
+        parent::__construct($main->getConfig()->get('buyCommand'), "Buy command!", "/buy", []);
+        $this->main = $main;
+    }
+    public function execute(CommandSender $sender, $label, array $args){
+        if(!$this->getPlugin()->getConfig()->get('disableBuyCommand')){
+            $pageToView = 0;
+            $categoryToView = false;
+            if(count($args) > 0){
+                if($args[0] == "page" && count($args) == 2 || count($args) == 3){
+                    if(count($args) == 2){
+                        $pageToView = $args[1];
+                    }
+                    else{
+                        $categoryToView = $args[1];
+                        $pageToView = $args[2];
+                    }
+                }
+                else{
+                    if(count($args) == 1 && is_numeric($args[0])){
+                        $package = $this->getPlugin()->getPackageManager()->getPackage($args[0]);
+                        if($package !== false){
+                            if($this->getPlugin()->getConfig()->get('directPay')){
+                                $link = $this->getPlugin()->getAuthPayloadSetting('serverStore') . "/checkout/packages?popup=true&action=add&direct=true&package=" . $package->getId() . "&ign=" . $sender->getName();
+                            }
+                            else{
+                                $link = $this->getPlugin()->getAuthPayloadSetting('serverStore') . "/checkout/packages?action=add&package=" . $package->getId() . "&ign=" . $sender->getName();
+                            }
+                            $linkTask = new VisitLinkTask($this->getPlugin(), ['url' => $link], ($sender instanceof Player ? $sender->getName() : false));
+                            $linkTask->call();
+                        }
+                        else{
+                            $sender->sendMessage($this->getPlugin()->getConfig()->get('packageNotFound'));
+                        }
+                        return true;
+                    }
+                    else{
+                        $sender->sendMessage($this->getPlugin()->getConfig()->get('invalidBuyCommand'));
+                        return true;
+                    }
+                }
+            }
+            if(is_numeric($pageToView) && is_numeric($categoryToView) || $categoryToView === false){
+                $packages = $this->getPlugin()->getPackageManager()->getPage($pageToView, $categoryToView);
+                if($packages !== false){
+                    if(count($packages) > 0){
+                        foreach($packages as $package){
+                            $sender->sendMessage($this->getPlugin()->getConfig()->get('packageId') . ": " . $package->getNiceId());
+                            $sender->sendMessage($this->getPlugin()->getConfig()->get('packageName') . ": " . $package->getName());
+                            $sender->sendMessage($this->getPlugin()->getConfig()->get('packagePrice') . ": " . $package->getPrice() . ' ' . $this->getPlugin()->getAuthPayloadSetting('serverCurrency'));
+                            $sender->sendMessage("--------");
+                        }
+                    }
+                    else{
+                        $sender->sendMessage($this->getPlugin()->getConfig()->get('pageNotFound'));
+                    }
+                }
+                else{
+                    $sender->sendMessage($this->getPlugin()->getConfig()->get('noPackagesForSale'));
+                }
+            }
+            else{
+                $sender->sendMessage($this->getPlugin()->getConfig()->get('invalidBuyCommand'));
+            }
+        }
+        else{
+            $sender->sendMessage("Buy command is disabled on this server.");
+            return true;
+        }
+    }
+    public function getPlugin(){
+        return $this->main;
+    }
+    public function updateCommand($name){
+        $arr = $this->getAliases();
+        if(!in_array($name, $arr)){
+            $arr[] = $name;
+            $this->setAliases($arr);
+            return true;
+        }
+        else{
+            return false;
+        }
+    }
+    public function getMainAlias(){
+        return (count($this->getAliases()) > 0 ? end($this->getAliases()) : $this->getName());
+    }
+}<?php
+namespace buycraft\commands;
+
+use buycraft\api\Actions;
+use buycraft\BuyCraft;
+use buycraft\task\AuthenticateTask;
+use buycraft\task\RecentPaymentsTask;
+use buycraft\task\ReloadCategoriesTask;
+use pocketmine\command\Command;
+use pocketmine\command\CommandSender;
+use pocketmine\command\PluginIdentifiableCommand;
+use pocketmine\Player;
+
+class BuyCraftCommand extends Command implements PluginIdentifiableCommand{
+    private $main;
+    public function __construct(BuyCraft $main){
+        parent::__construct("buycraft", "Buycraft command!", "/<command> <reload/forcecheck/secret/payments <ign>>", ["bc"]);
+        $this->main = $main;
+    }
+    public function execute(CommandSender $sender, $label, array $args){
+        if(isset($args[0])){
+            if($sender->hasPermission('buycraft.admin')){
+                switch($args[0]){
+                    case 'reload':
+                        if($this->getPlugin()->isAuthenticated()){
+                            $sender->sendMessage("Scheduled authentication and package reload. If you don't get a success message try again.");
+                            $auth = new AuthenticateTask($this->getPlugin(), [], ($sender instanceof Player ? $sender : false));
+                            $auth->call();
+                        }
+                        else{
+                            $sender->sendMessage("Not authenticated with BuyCraft.net.");
+                        }
+                        break;
+                    case 'forcecheck':
+                        if($this->getPlugin()->isAuthenticated()){
+                            $this->getPlugin()->getPendingPlayerCheckerTask()->onRun(0, true);
+                            $sender->sendMessage("Executed pending player check.");
+                        }
+                        else{
+                            $sender->sendMessage("Not authenticated with BuyCraft.net.");
+                        }
+                        break;
+                    case 'secret':
+                        if(!$this->getPlugin()->getConfig()->get('disable-secret-command')){
+                            if(isset($args[1])){
+                                $this->getPlugin()->getConfig()->set('secret', $args[1]);
+                                $this->getPlugin()->getConfig()->save();
+                                $sender->sendMessage("Scheduled authentication. If you don't receive a success message an error will be available on the console.");
+                                $auth = new AuthenticateTask($this->getPlugin(), [], ($sender instanceof Player ? $sender->getName() : false));
+                                $this->getPlugin()->getServer()->getScheduler()->scheduleAsyncTask($auth);
+                            }
+                            else{
+                                $sender->sendMessage("You must specify the secret to set.");
+                            }
+                        }
+                        else{
+                            $sender->sendMessage("Setting secret in game has been disabled.");
+                        }
+                        break;
+                    case 'payments':
+                        $recentPaymentTask = new RecentPaymentsTask($this->getPlugin(), (isset($args[1]) ? ["ign" => $args[1]] : []), ($sender instanceof Player ? $sender->getName() : false));
+                        $recentPaymentTask->call();
+                        break;
+                    case 'report':
+                        $sender->sendMessage("BuyCraft for PocketMine does not support report generation. If the plugin crashes just alert me on GitHub or the PocketMine forums with a link to the crash report.");
+
+                        break;
+                    default:
+                        $sender->sendMessage($this->getUsage());
+                        break;
+                }
+            }
+            else{
+                $sender->sendMessage("You don't has permission to use that command.");
+            }
+        }
+        else{
+            if($this->getPlugin()->isAuthenticated()){
+                $buyCommand = "/" . $this->getPlugin()->getBuyCommand()->getMainAlias() . " ";
+                $sender->sendMessage($buyCommand . ": View packages available for sale.");
+                $sender->sendMessage($buyCommand . "page <ID> : Navigate through package pages");
+                $sender->sendMessage($buyCommand . "<ID> : Purchase a specific package");
+                if($sender->hasPermission('buycraft.admin')){
+                    $sender->sendMessage("/buycraft reload : Reload the package cache");
+                    $sender->sendMessage("/buycraft forcecheck : Check for pending commands");
+                    if(!$this->getPlugin()->getConfig()->get('disable-secret-command')){
+                        $sender->sendMessage("/buycraft secret <key> : Set the secret");
+                    }
+                    $sender->sendMessage("/buycraft payments [ign] : Get recent payments");
+                    $sender->sendMessage("/buycraft report :  Gives instructions to report errors.");
+                }
+                $sender->sendMessage("Server ID: " . $this->getPlugin()->getAuthPayloadSetting('serverId'));
+                $sender->sendMessage("Server URL: " . $this->getPlugin()->getAuthPayloadSetting('serverStore'));
+                $sender->sendMessage("Version: " . $this->getPlugin()->getServer()->getPluginManager()->getPlugin('BuyCraft')->getDescription()->getVersion() . " implementing BuyCraft Bukkit " . Actions::PLUGIN_VERSION);
+                $sender->sendMessage("Website: http://buycraft.net");
+
+            }
+            else{
+                $sender->sendMessage("BuyCraft is not linked to buycraft.net and can't process purchases for you.");
+                $sender->sendMessage("If you are the owner of this server you need to enter your secret key in the config.yml or using /buycraft secret <key>.");
+            }
+        }
+    }
+    public function getPlugin(){
+        return $this->main;
+    }
+}<?php
+namespace buycraft\task;
+
+
+use buycraft\api\Actions;
+use buycraft\api\ApiAsyncTask;
+use buycraft\BuyCraft;
+use pocketmine\command\CommandSender;
+
+/*
+ * This is an Async task which allows PendingPlayerCheckerTask to
+ * send requests outside the main thread.
+ */
+class PendingUsersTask extends ApiAsyncTask{
+    public function onConfig(BuyCraft $plugin){
+        $data = $this->getData();
+        $data["action"] = Actions::PENDING_PLAYERS;
+        $this->setData($data);
+    }
+    public function onProcess(){
+
+    }
+    public function onOutput(BuyCraft $main, CommandSender $sender){
+        $res = $this->getOutput();
+        if($res !== false && is_array($res["payload"]["pendingPlayers"])){
+            $playersToFetch = [];
+            foreach($res["payload"]["pendingPlayers"] as $player){
+                $p = $main->getServer()->getPlayerExact($player);
+                if($p !== null && $p->isOnline()){
+                    $playersToFetch[] = $p->getName();
+                }
+                else{
+                    $main->getPendingPlayerCheckerTask()->addPendingPlayer($player);
+                }
+            }
+            if($res["payload"]["offlineCommands"] || count($playersToFetch) > 0){
+                $fetch = new CommandFetchTask($main, ["users" => $playersToFetch, "offlineCommands" => $res["payload"]["offlineCommands"]]);
+                $fetch->call();
+            }
+        }
+    }
+}<?php
+namespace buycraft\api;
+
+use buycraft\BuyCraft;
+use buycraft\util\DebugUtils;
+use buycraft\util\HTTPUtils;
+use pocketmine\command\CommandSender;
+use pocketmine\command\ConsoleCommandSender;
+use pocketmine\Player;
+use pocketmine\scheduler\AsyncTask;
+use pocketmine\Server;
+use pocketmine\utils\Utils;
+
+/**
+ * Class ApiAsyncTask
+ * @package buycraft\api
+ */
+abstract class ApiAsyncTask extends AsyncTask{
+    /**
+     * @var
+     */
+    private $output;
+    /**
+     * @param BuyCraft $main
+     * @param array $data
+     * @param bool $player
+     */
+    public function __construct(BuyCraft $main, $data = [], $player = false){
+        DebugUtils::construct($this);
+        if($main->getConfig()->get("https")){
+            $this->apiUrl = "https://api.buycraft.net/v4";
+        }
+        else{
+            $this->apiUrl = "http://api.buycraft.net/v4";
+        }
+        $data["secret"] = $main->getConfig()->get("secret");
+        $data["playersOnline"] = count($main->getServer()->getOnlinePlayers());
+        $this->data = serialize($data);
+        $this->player = $player;
+        $this->isAuthenticated = $main->isAuthenticated();
+        $this->autoloader = unserialize(serialize($main->getServer()->getLoader())); //TODO improve this
+        $this->onConfig($main);
+    }
+    /**
+     * @return array
+     */
+    public function getData(){
+        return unserialize($this->data);
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getOutput(){
+        return unserialize($this->output);
+    }
+
+    /**
+     * @param array $data
+     */
+    public function setData(array $data){
+        $this->data = serialize($data);
+    }
+    /*
+     * This function is called from a task and can't interact with the API.
+     */
+    public function send(){
+        $data = $this->getData();
+        if($this->isAuthenticated || $data["action"] === Actions::AUTHENTICATE){
+            $url = $this->apiUrl . "?" . http_build_query($data);
+            DebugUtils::requestOut($this, $url);
+            $this->output = serialize(json_decode(HTTPUtils::getURL($url), true));
+        }
+        else{
+            $this->output = false;
+        }
+    }
+    /**
+     * @return \pocketmine\scheduler\ServerScheduler
+     */
+    public function getScheduler(){
+        return Server::getInstance()->getScheduler();
+    }
+
+    /**
+     *
+     */
+    public function call(){
+        DebugUtils::taskRegistered($this);
+        $this->getScheduler()->scheduleAsyncTask($this);
+    }
+    /**
+     * @param BuyCraft $main
+     * @param Player $p
+     * @return mixed
+     */
+    abstract public function onOutput(BuyCraft $main, CommandSender $p);
+    /**
+     * @param BuyCraft $main
+     * @return mixed
+     */
+    abstract public function onConfig(BuyCraft $main);
+    abstract public function onProcess();
+    public function onRun(){
+        DebugUtils::taskCalled($this);
+        $this->autoloader->register(true);
+        $this->send();
+        $this->onProcess();
+    }
+    /**
+     * @param Server $server
+     */
+    public function onCompletion(Server $server){
+        DebugUtils::taskComplete($this);
+        $plugin = $server->getPluginManager()->getPlugin("BuyCraft");
+        if($plugin instanceof BuyCraft && $plugin->isEnabled()){
+            if($this->player !== false){
+                $player = $server->getPlayerExact($this->player);
+                if($player !== null && $player->isOnline()){
+                    $this->onOutput($plugin, $player);
+                }
+            }
+            else{
+                $this->onOutput($plugin, new ConsoleCommandSender());
+            }
+        }
+
+    }
+}

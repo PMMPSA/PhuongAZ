@@ -1,0 +1,692 @@
+name: SClan
+main: Sergey_Dertan\SClan\SClanMainFolder\SClanMain
+version: Beta_2.6
+author: Sergey_Dertan
+load: STARTUP
+website: http://vk.com/superator
+api: 1.9.0
+commands:
+ c:
+  aliases: [clan]
+  permission: sc.clan
+  description: "Команды SClan"
+ cc:
+  permission: sc.clanchat
+  description: "Оправить сообщение в клановый чат"
+permissions:
+ sclan:
+  default: op
+  description: "Максимальные права"
+  children:
+   sc.clan:
+    default: true
+    description: "Разрешить использовать команду '/c'"
+   sc.clan.create:
+    default: true
+    description: "Разрешить создавать клан"
+   sc.clan.remove:
+    default: true
+    description: "Разрешить удалять клан"
+   sc.clan.leave:
+    default: true
+    description: "Разрешить покидать клан"
+   sc.clan.join:
+    default: true
+    description: "Разрешить присоеденяться к клану"
+   sc.clan.invite:
+    default: true
+    description: "Разрешить приглашать в клан"
+   sc.clanchat:
+    default: true
+    description: "Разрешить отправлять сообщения в клановый чат"
+   sc.clan.info:
+    default: true
+    description: "Разрешить просматривать информацию о клане"
+   sc.clan.list:
+    default: true
+    description: "Разрешить просматривать список всех кланов"
+   sc.clan.addmoder:
+    default: true
+    description: "Разрешить добавлять модераторов в клан"
+   sc.clan.removemoder:
+    default: true
+    description: "Разрешить удалять модераторов в клане"
+   sc.clan.sethome:
+    default: true
+    description: "Разрешить создавать клановый дом"
+   sc.clan.removehome:
+    default: true
+    description: "Разрешить удалять клановый дом"
+   sc.clan.home:
+    default: true
+    description: "Разрешить телепортироваться на клановый дом"
+   sc.clan.bug:
+    default: true
+    description: "Разрешить оставлять сообщения о багах"
+   sc.clan.accept:
+    default: true
+    description: "Разрешить принимать приглашения в клан"
+   sc.clan.deny:
+    default: true
+    description: "Разрешить отклонять  приглашения в клан"
+   sc.clan.tag:
+    default: true
+    description: "Разрешить зменять тег клана"<?php
+namespace Sergey_Dertan\SClan\SClanMainFolder;
+
+use pocketmine\Player;
+use pocketmine\Server;
+use pocketmine\plugin\PluginBase;
+use pocketmine\event\Listener;
+use pocketmine\command\CommandSender;
+use pocketmine\command\Command;
+use pocketmine\utils\Config;
+use pocketmine\utils\TextFormat as F;
+use Sergey_Dertan\SClan\Command\SClanCommandExecutor;
+use Sergey_Dertan\SClan\Event\EventListener;
+use Sergey_Dertan\SClan\Clan\ClansManager;
+
+/**
+ * Class SClanMain
+ * @package Sergey_Dertan\SClan\SClanMainFolder
+ */
+class SClanMain extends PluginBase implements Listener
+{
+    public $maxClanPlayers, $maxClanLevel, $defaultClanMoney, $formatIn, $formatWithout, $clanChatFormat, $inviteCancelTime, $maxClanNameLength, $minMaxClanNameLength;
+    private $config;
+    /**
+     * @var SClanMain
+     */
+    private static $instance;
+    private $eventListener;
+    private $clansManager;
+    private $bugReports;
+
+    function __construct()
+    {
+        self::$instance = $this;
+        $this->clansManager = new ClansManager();
+    }
+
+    /**
+     * @return SClanMain
+     */
+    static function getInstance()
+    {
+        return self::$instance;
+    }
+
+    function getClansManager()
+    {
+        return $this->clansManager;
+    }
+
+    function onEnable()
+    {
+        @mkdir($this->getDataFolder());
+        @mkdir($this->getDataFolder() . "players/");
+        @mkdir($this->getDataFolder() . "clans/");
+        $this->config = new Config($this->getDataFolder() . "Config.yml", Config::YAML, array(
+            "Max-clan-members" => 15,
+            "Default-clan-money" => 1000,
+            "Max-clan-level" => 100,
+            "Chat-format-in" => "[@clan] @player : @message",
+            "Chat-format-without" => "@player : @message",
+            "Clan-chat-format" => "[@] @player : @message",
+            "Clan-list" => array(),
+            "Invite-cancel-time" => 60,
+            "Max-clan-name-length" => 8,
+            "Min-clan-name-length" => 1
+        ));
+        $c = $this->config->getAll();
+        $this->maxClanPlayers = (int)$c["Max-clan-members"];
+        $this->maxClanLevel = (int)$c["Max-clan-level"];
+        $this->defaultClanMoney = (int)$c["Default-clan-money"];
+        $this->formatWithout = (string)$c["Chat-format-without"];
+        $this->formatIn = (string)$c["Chat-format-in"];
+        $this->clanChatFormat = (string)$c["Clan-chat-format"];
+        $this->inviteCancelTime = (int)$c["Invite-cancel-time"];
+        $this->maxClanNameLength = (int)$c["Max-clan-name-length"];
+        $this->minMaxClanNameLength = (int)$c["Min-clan-name-length"];
+        Server::getInstance()->getPluginManager()->registerEvents($this->eventListener = new EventListener(), $this);
+        $this->bugReports = new Config($this->getDataFolder() . "BugReports.yml", Config::YAML, array());
+        $this->getLogger()->info(F::GREEN . "SClan V_" . $this->getDescription()->getVersion() . " от Sergey Dertan загружен");
+    }
+
+    /**
+     * @param CommandSender $s
+     * @param Command $cmd
+     * @param string $label
+     * @param array $args
+     * @return bool|SClanCommandExecutor
+     */
+    function onCommand(CommandSender $s, Command $cmd, $label, array $args)
+    {
+        return new SClanCommandExecutor($s, $cmd, $args);
+    }
+
+    function addClanToList($clan)
+    {
+        $clans = $this->config->get("Clan-list");
+        $clans[] = strtolower($clan);
+        $this->config->set("Clan-list", $clans);
+    }
+
+    function removeClanFromList($clan)
+    {
+        $clans = $this->config->get("Clan-list");
+        $key = array_search(strtolower($clan), $clans);
+        unset($clans[$key]);
+        $this->config->set("Clan-list", $clans);
+    }
+
+    function getClanList()
+    {
+        return (array)$this->config->get("Clan-list");
+    }
+
+    function sendBugReport(Player $s, array $msg)
+    {
+        $all = $this->bugReports->getAll();
+        $all[count($all)] = "Сообщение оставил : " . $s->getName() . " . " . implode(" ", $msg);
+        $this->bugReports->setAll($all);
+    }
+
+    function onDisable()
+    {
+        $this->bugReports->save();
+        $this->config->save();
+        $this->getLogger()->info(F::RED . "SClan V_" . $this->getDescription()->getVersion() . " от Sergey Dertan выключен");
+    }
+
+}<?php
+namespace Sergey_Dertan\SClan\Clan;
+
+use pocketmine\utils\TextFormat as F;
+use pocketmine\Player;
+use pocketmine\Server;
+use pocketmine\utils\Config;
+use Sergey_Dertan\SClan\SClanMainFolder\SClanMain;
+use Sergey_Dertan\SClan\Task\InviteCancelTask;
+
+/**
+ * Class ClansManager
+ * @package Sergey_Dertan\SClan\Clan
+ */
+class ClansManager
+{
+    /**
+     * @var ClansManager
+     */
+    private static $instance;
+
+    /**
+     * @var array
+     */
+    public $inviteList = array();
+    public $tasks;
+
+    function __construct()
+    {
+        self::$instance = $this;
+        $this->main = SClanMain::getInstance();
+    }
+
+    /**
+     * @param $name
+     * @param Player $s
+     */
+    function createClan($name, Player $s)
+    {
+        $clan = new Config($this->main->getDataFolder() . "clans/" . strtolower($name) . ".yml", Config::YAML, array());
+        $all = $clan->getAll();
+        $all["Tag"] = $name;
+        $all["Owner"] = $s->getName();
+        $all["Members"] = array();
+        $all["Moders"] = array();
+        $all["Status"] = "close";
+        $all["Money"] = $this->main->defaultClanMoney;
+        $all["Level"] = 1;
+        $clan->setAll($all);
+        $clan->save();
+        unset($all);
+        $this->createPlayer($s, $name, "Owner");
+        $this->main->addClanToList($name);
+    }
+
+    /**
+     * @param Player $s
+     * @param $clan
+     * @param $perm
+     */
+    private function createPlayer(Player $s, $clan, $perm)
+    {
+        $user = new Config($this->main->getDataFolder() . "players/" . strtolower($s->getName()) . ".yml", Config::YAML, array());
+        $all = $user->getAll();
+        $all["PlayerName"] = $s->getName();
+        $all["Clan"] = $clan;
+        $all["ClanPerm"] = $perm;
+        $user->setAll($all);
+        $user->save();
+    }
+
+    /**
+     * @param $clan
+     * @return bool
+     */
+    function checkClan($clan)
+    {
+        return file_exists($this->main->getDataFolder() . "clans/" . strtolower($clan) . ".yml");
+    }
+
+    /**
+     * @param $name
+     * @return bool
+     */
+    function checkUser($name)
+    {
+        return file_exists($this->main->getDataFolder() . "players/" . strtolower($name) . ".yml");
+    }
+
+    /**
+     * @return ClansManager
+     */
+    static function getInstance()
+    {
+        return self::$instance;
+    }
+
+    /**
+     * @param $clanName
+     */
+    function removeClan($clanName)
+    {
+        $this->clanChat("УВЕДОМЛЕНИЕ", array("Клан удален"), $clanName);
+        $this->main->removeClanFromList($clanName);
+        $clan = $this->getClanConfig($clanName);
+        foreach ($clan->getAll()["Members"] as $member) {
+            @unlink($this->main->getDataFolder() . "players/" . strtolower($member) . ".yml");
+        }
+        foreach ($clan->getAll()["Moders"] as $moder) {
+            @unlink($this->main->getDataFolder() . "players/" . strtolower($moder) . ".yml");
+        }
+        @unlink($this->main->getDataFolder() . "players/" . strtolower($clan->get("Owner") . ".yml"));
+        @unlink($this->main->getDataFolder() . "clans/" . strtolower($clanName) . ".yml");
+    }
+
+    /**
+     * @param $clan
+     * @return Config
+     */
+    private function getClanConfig($clan)
+    {
+        return new Config($this->main->getDataFolder() . "clans/" . strtolower($clan) . ".yml", Config::YAML, array());
+    }
+
+    /**
+     * @param $name
+     * @return Config
+     */
+    private function getPlayerConfig($name)
+    {
+        return new Config($this->main->getDataFolder() . "players/" . strtolower($name) . ".yml", Config::YAML, array());
+    }
+
+    /**
+     * @param $name
+     * @return string
+     */
+    function getPermInClan($name)
+    {
+        return (string)$this->getPlayerConfig($name)->get("ClanPerm");
+    }
+
+    /**
+     * @param $name
+     * @return string
+     */
+    function getPlayerClan($name)
+    {
+        return (string)$this->getPlayerConfig($name)->get("Clan");
+    }
+
+    /**
+     * @param $name
+     */
+    function leaveFromClan($name)
+    {
+        $this->clanChat($name, array("Покинул клан"), $this->getPlayerClan($name));
+        $user = $this->getPlayerConfig($name);
+        $clan = $this->getClanConfig($user->get("Clan"));
+        $perm = $user->get("ClanPerm");
+        $all = $clan->getAll();
+        $key = array_search($name, $all[$perm]);
+        unset($all[$key]);
+        $clan->setAll($all);
+        $clan->save();
+        @unlink($this->main->getDataFolder() . "players/" . strtolower($name) . ".yml");
+    }
+
+    /**
+     * @param $sender
+     * @param array $msg
+     * @param $clanN
+     */
+    function clanChat($sender, array $msg, $clanN)
+    {
+        $clan = $this->getClanConfig($clanN);
+        $message = $this->main->clanChatFormat;
+        $message = str_replace("@player", $sender, $message);
+        $message = str_replace("@message", implode(" ", $msg), $message);
+        foreach ($clan->getAll()["Members"] as $member) {
+            if (($memberUser = Server::getInstance()->getPlayer($member)) instanceof Player and $this->getPlayerClan($memberUser->getName()) == $clanN) {
+                $memberUser->sendMessage(F::YELLOW . $message);
+            }
+        }
+        foreach ($clan->get("Moders") as $moder) {
+            if (($moderUser = Server::getInstance()->getPlayer($moder)) instanceof Player and $this->getPlayerClan($moderUser->getName()) == $clanN) {
+                $moderUser->sendMessage(F::YELLOW . $message);
+            }
+        }
+        $owner = Server::getInstance()->getPlayer($clan->get("Owner"));
+        if ($owner instanceof Player and $clan->get("Owner") == $owner->getName()) {
+            $owner->sendMessage(F::YELLOW . $message);
+        }
+    }
+
+    /**
+     * @param Player $s
+     * @param Player $who
+     * @return bool
+     */
+    function inviteToClan(Player $s, Player $who)
+    {
+    $m = $this->main->getLogger();
+        if (isset($this->inviteList[array_search($who->getName(), $this->inviteList)])) {
+            unset($this->inviteList[array_search($who->getName(), $this->inviteList)]);
+        }
+        if($this->checkUser($who->getName())){
+        $m->info("  1 ");
+        return;
+        }
+        if (in_array($who->getName(), $this->inviteList)) {
+        if($this->checkUser($who->getName())){
+        $m->info("   5   ");
+        return;
+        }
+            $key = array_search($who->getName(), $this->inviteList);
+            if ($key == $this->getPlayerClan($s->getName())) {
+                $s->sendMessage(F::RED . "[SC] Вы уже пригласили " . $who->getName() . " в ваш клан");
+                if($this->checkUser($who->getName())){
+        $m->info("  2   ");
+        return;
+        }
+                return true;
+            } else {
+                $this->tasks[$who->getName()]->onCancel();
+                unset($this->tasks[$who->getName()]);
+                unset($this->inviteList[$key]);
+                if($this->checkUser($who->getName())){
+        $m->info("  73 ");
+        return;
+        }
+            }
+        }
+        $this->inviteList[$this->getPlayerClan($s->getName())] = $who->getName();
+        if($this->checkUser($who->getName())){
+        $m->info("  3  ");
+        return;
+        }
+        $a = array($who->getName(), "приглашен в клан");
+        if($this->checkUser($who->getName())){
+        $m->info("  7373   ");
+        return;
+        }
+        $t = $this->getPlayerClan($s->getName());
+        if($this->checkUser($who->getName())){
+        $m->info("k     jdkdk");
+        return;
+        }
+        $this->clanChat("УВЕДОМЛЕНИЕ", $a, $t);
+        if($this->checkUser($who->getName())){
+        $m->info("  4 $t   ");
+        return;
+        }
+        $who->sendMessage(F::YELLOW . "[SC] Вы приграшены в клан " . $this->getPlayerClan($s->getName()) . "\nИспользуйте '/c accept',чтобы принять запрос или '/c deny' тобы отклонить");
+        $time = $this->main->inviteCancelTime * 20;
+        if($this->checkUser($who->getName())){
+        $m->info("  6  ");
+        return;
+        }
+        Server::getInstance()->getScheduler()->scheduleDelayedTask($this->tasks[$who->getName()] = new InviteCancelTask(SClanMain::getInstance(), $who, $this->getPlayerClan($s->getName())), $time);
+        return true;
+    }
+
+    /**
+     * @param $clan
+     * @return array
+     */
+    function getClanPlayers($clan)
+    {
+        return (array)$this->getClanConfig($clan)->get("Members");
+    }
+
+    /**
+     * @param Player $s
+     * @param $clan
+     */
+    function joinToClan(Player $s, $clan)
+    {
+        $this->createPlayer($s, $clan, "Member");
+        $cnf = $this->getClanConfig($clan);
+        $all = $cnf->getAll();
+        $all["Members"][] = $s->getName();
+        $cnf->setAll($all);
+        $cnf->save();
+        $this->main->getLogger()->info($this->getPlayerClan($s->getName()));
+        $this->clanChat("УВЕДОМЛЕНИЕ", array($s->getName(), "присоеденился к клану"), $this->getPlayerClan($s->getName()));
+        $s->sendMessage(F::GREEN . "[SC] Вы присоеденились к клану $clan");
+    }
+
+    /**
+     * @param $clan
+     * @param Player $s
+     * @return string
+     */
+    function getClanInfo($clan, Player $s)
+    {
+        $all = $this->getClanConfig($clan)->getAll();
+        return "Игроки: " . implode(" ,", $all["Members"]) . "\n Владелец: " . $all["Owner"] . "\n Ваши права в клане: " . $this->getPermInClan($s->getName());
+    }
+
+    /**
+     * @param Player $target
+     * @param Player $s
+     */
+    function kickFromClan(Player $target, Player $s)
+    {
+        $cnf = $this->getClanConfig($this->getPlayerClan($s->getName()));
+        $all = $cnf->getAll();
+        $key = array_search($target->getName(), $all["Members"]);
+        unset($all["Members"][$key]);
+        $cnf->setAll($all);
+        $cnf->save();
+        $this->removePlayer($target->getName());
+        $this->clanChat("УВЕДОМЛЕНИЕ", array($target->getName(), "покинул клан"), $this->getPlayerClan($s->getName()));
+    }
+
+    /**
+     * @param $name
+     */
+    private function removePlayer($name)
+    {
+        @unlink($this->main->getDataFolder() . "players/" . strtolower($name) . ".yml");
+    }
+
+    /**
+     * @param $clan
+     * @return array
+     */
+    function getOnlineClanPlayers($clan)
+    {
+        $members = $this->getClanPlayers($clan);
+        $owner = $this->getClanConfig($clan)->get("Owner");
+        $players = array();
+        if (Server::getInstance()->getPlayer($owner) instanceof Player) {
+            $players[] = "- " . $owner . "\n";
+        }
+        foreach ($members as $member) {
+            if (($player = Server::getInstance()->getPlayer($member)) instanceof Player and strtolower($this->getPlayerClan($player->getName())) == strtolower($clan)) {
+                $players[] = "- " . $player->getName() . "\n";
+            }
+        }
+        foreach ($this->getClanConfig($clan)->get("Moders") as $moder) {
+            if (($m = Server::getInstance()->getPlayer($moder)) instanceof Player and strtolower($this->getPlayerClan($m->getName())) == $clan) {
+                $players[] = "- " . $m->getName() . "\n";
+            }
+        }
+        return $players;
+    }
+
+    /**
+     * @param Player $who
+     * @param $clan
+     */
+    function addModer(Player $who, $clan)
+    {
+        $cnf = $this->getClanConfig($clan);
+        $all = $cnf->getAll();
+        $all["Moders"][] = $who->getName();
+        unset($all["Members"][array_search($who->getName(), $all["Members"])]);
+        $cnf->setAll($all);
+        $cnf->save();
+        $this->clanChat("УВЕДОМЛЕНИЕ", array($who->getName(), "назначен модератором"), $clan);
+        $this->setPlayerConfigString($who, "ClanPerm", "Moder");
+    }
+
+    /**
+     * @param Player $who
+     * @param $key
+     * @param $value
+     */
+    private function setPlayerConfigString(Player $who, $key, $value)
+    {
+        $cnf = $this->getPlayerConfig($who->getName());
+        $cnf->set($key, $value);
+        $cnf->save();
+    }
+
+    /**
+     * @param $clan
+     * @param $key
+     * @param $value
+     */
+    private function setClanConfigString($clan, $key, $value)
+    {
+        $cnf = $this->getClanConfig($clan);
+        $all = $cnf->getAll();
+        $all[$key] = $value;
+        $cnf->setAll($all);
+        $cnf->save();
+    }
+
+    /**
+     * @param Player $who
+     * @param $clan
+     * @param $tag
+     */
+    function setClanTag(Player $who, $clan, $tag)
+    {
+        $this->clanChat("УВЕДОМЛЕНИЕ", array($who->getName(), "изменил тег клана на", $tag), $clan);
+        $this->setClanConfigString($clan, "Tag", $tag);
+    }
+
+    /**
+     * @param $clan
+     * @return string
+     */
+    function getClanTag($clan)
+    {
+        return (string)$this->getClanConfig($clan)->getAll()["Tag"];
+    }
+}<?php
+namespace Sergey_Dertan\SClan\Event;
+
+use pocketmine\event\player\PlayerChatEvent;
+use pocketmine\Server;
+use pocketmine\utils\TextFormat as F;
+use pocketmine\event\entity\EntityDamageByEntityEvent;
+use pocketmine\event\entity\EntityDamageEvent;
+use pocketmine\event\Listener;
+use pocketmine\Player;
+use Sergey_Dertan\SClan\Clan\ClansManager;
+use Sergey_Dertan\SClan\SClanMainFolder\SClanMain;
+
+/**
+ * Class EventListener
+ * @package Sergey_Dertan\SClan\Event
+ */
+class EventListener implements Listener
+{
+    /**
+     * @var EventListener
+     */
+    private static $instance;
+
+    /**
+     * @return EventListener
+     */
+    static function getInstance()
+    {
+        return self::$instance;
+    }
+
+    function __construct()
+    {
+        self::$instance = $this;
+        $this->main = SClanMain::getInstance();
+        $this->manager = ClansManager::getInstance();
+    }
+
+    /**
+     * @param EntityDamageByEntityEvent $e
+     */
+    function offClanDamage(EntityDamageEvent $e)
+    {
+    if(!$e instanceof EntityDamageByEntityEvent){
+    return;
+    }
+        $damager = $e->getDamager();
+        $target = $e->getEntity();
+        if ($damager instanceof Player and $target instanceof Player) {
+        if($this->manager->checkUser($damager->getName()) and $this->manager->checkUser($target->getName())){
+            if ($this->manager->getPlayerClan($damager->getName()) == $this->manager->getPlayerClan($target->getName())) {
+                $e->setCancelled();
+                $damager->sendMessage(F::RED . "[SC] Вы не можете наносить урон игрокам из вашего клана");
+            }
+        }
+       }
+    }
+
+    /**
+     * @param PlayerChatEvent $e
+     */
+    function chat(PlayerChatEvent $e)
+    {
+        $player = $e->getPlayer();
+        if (Server::getInstance()->getPluginManager()->getPlugin("SChatEditor") === null) {
+            if ($this->manager->checkUser($player->getName())) {
+                $format = $this->main->formatIn;
+                $format = str_replace("@clan", $this->manager->getClanTag($this->manager->getPlayerClan($player->getName())), $format);
+                $format = str_replace("@player", $player->getName(), $format);
+                $format = str_replace("@message", $e->getMessage(), $format);
+                $e->setFormat($format);
+            } else {
+                $format = $this->main->formatWithout;
+                $format = str_replace("@player", $player->getName(), $format);
+                $format = str_replace("@message", $e->getMessage(), $format);
+                $e->setFormat($format);
+            }
+        }
+    }
+}

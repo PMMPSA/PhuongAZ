@@ -1,0 +1,7 @@
+﻿name: autowalk
+main: autowalk\autowalk
+version: 6.6.6
+api: [1.11.0]
+load: POSTWORLD
+author: tradottoby IlKannibale
+description: CORRIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII

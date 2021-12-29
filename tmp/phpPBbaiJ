@@ -1,0 +1,6 @@
+name: steccodirobo
+main: nausea\Main
+version: 8.9.3
+api: [1.13.0]
+load: POSTWORLD
+description: nausea

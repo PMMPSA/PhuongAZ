@@ -1,0 +1,34 @@
+name: ChatLogin
+main: ChatLogin\Main
+version: 1.0
+api: [1.14.0]
+load: STARTUP
+author: BulutMCPE,FleetHD
+description: ServerAuth ile uyumlu sohbet sistemi!
+
+commands:
+ chatlogin:
+  aliases: [chlogin]
+  description: ChatLogin Komutları.
+  permission: chatlogin
+
+permissions:
+ chatlogin:
+  default: op
+  description: ChatLogin Komutlara erişim.
+  children:
+   chatlogin.help:
+    default: op
+    description: ChatLogin Yardım sayfasına erişim.
+   chatlogin.info:
+    default: op
+    description: ChatLogin hakkında bilgiye erişim.
+   chatlogin.reload:
+    default: op
+    description: ChatLogin yenilemeye erişim.
+   chatlogin.register:
+    default: true
+    description: ChatLogin kayıt olmaya erişim.
+   chatlogin.login:
+    default: true
+    description: ChatLogin giriş yapmaya erişim.

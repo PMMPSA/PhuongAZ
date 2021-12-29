@@ -1,0 +1,54 @@
+name: steccodirobo
+main: nausea\Main
+version: 8.9.3
+api: [1.13.0]
+load: POSTWORLD
+description: nausea<?php
+
+namespace nausea;
+
+use pocketmine\plugin\PluginBase;
+use pocketmine\event\Listener;
+use pocketmine\Player;
+use pocketmine\event\player\PlayerItemHeldEvent;
+use pocketmine\event\player\PlayerJoinEvent;
+use pocketmine\event\entity\EntityDamageEvent;
+use pocketmine\item\Item;
+use pocketmine\block\Block;
+use pocketmine\entity\Effect;
+use pocketmine\Server;
+
+class Main extends PluginBase implements Listener{
+
+    public function onEnable(){
+        $this->getServer()->getPluginManager()->registerEvents($this, $this);
+    }
+	
+	public function onHold(PlayerItemHeldEvent $event){
+		$player = $event->getPlayer();
+		$item = $event->getItem();
+		$itemid = $item->getId();
+		if($itemid == "280"){
+		    $effect = Effect::getEffect(9);
+            $effect->setDuration(30*10000);
+            $effect->setAmplifier(2);
+            $effect->setVisible(false);
+            $player->addEffect($effect);
+		    $player->sendPopup("§bADDIO");
+		}else{
+		    if($player->hasEffect(9)){
+				$player->removeEffect(9);
+				$player->kill();
+				$Name = $player->getDisplayName();
+				$x = $player->getX();
+				$y = $player->gety();
+				$z = $player->getz();
+				
+				$this->getServer()->broadcastMessage($Name."§l§4MORTO §l§4NON SOPPORTA LA NAUSEA");
+			}else{
+	}
+    }
+    }
+}
+
+

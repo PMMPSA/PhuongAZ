@@ -1,0 +1,6 @@
+name: ChatCute
+version: 1.0
+main: Chat\dee\dee
+api: [3.0.0-ALPHA2, 2.1.0]
+author: ฟรองซ์เอง
+

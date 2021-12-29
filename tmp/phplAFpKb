@@ -1,0 +1,10 @@
+name: GlobalBan
+version: "1.2"
+main: GlobalBan\Main
+api: [2.0.0]
+author: LazzKiller
+commands:
+    gban:
+        description: "Banir um player permanente"
+        permission: gban.command
+        default: op

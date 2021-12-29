@@ -1,0 +1,826 @@
+name: RankUp
+main: rankup\RankUp
+version: 0.3.1
+author: Falkirks
+api: [1.4.0]
+load: POSTWORLD
+softdepend: ["EconomyAPI", "PocketMoney", "PurePerms"]
+permissions:
+ rankup:
+  default: true
+  children:
+    rankup.rankup:
+      default: true
+      description: Allow ranking up
+    rankup.admin:
+      default: op
+      description: Manage RankUp and view statistics
+    rankup.groups:
+      default: false
+      description: Do NOT set this. It is used for group managment.
+<?php
+namespace rankup;
+
+use pocketmine\utils\Config;
+use rankup\command\RankUpCommand;
+use rankup\doesgroups\RankUpDoesGroups;
+use rankup\economy\BaseEconomy;
+use rankup\economy\EconomyLoader;
+use pocketmine\plugin\PluginBase;
+use rankup\permission\PermissionLoader;
+use rankup\permission\BasePermissionManager;
+use rankup\rank\RankStore;
+
+class RankUp extends PluginBase{
+    /** @var  LanguageConfig */
+    private $languageConfig;
+    /** @var  RankUpDoesGroups */
+    private $rankUpDoesGroups = false;
+    /** @var  PermissionLoader */
+    private $permissionLoader;
+    /** @var  BasePermissionManager */
+    private $permManager;
+    /** @var  EconomyLoader */
+    private $economyLoader;
+    /** @var  BaseEconomy */
+    private $economy = false;
+    /** @var  RankStore */
+    private $rankStore;
+    /** @var  RankUpCommand */
+    private $rankupCommand;
+    public function onEnable(){
+        $this->saveDefaultConfig();
+        $this->languageConfig = new LanguageConfig($this->getConfig());
+        $this->loadRankUpDoesGroups();
+
+        $this->permissionLoader = new PermissionLoader($this);
+        $this->permissionLoader->load();
+
+        $this->economyLoader = new EconomyLoader($this);
+        $this->economyLoader->load();
+
+        $this->rankStore = new RankStore($this);
+        $this->rankStore->loadFromConfig();
+
+        $this->rankupCommand = new RankUpCommand($this);
+        $this->getServer()->getCommandMap()->register("rankup", $this->rankupCommand);
+    }
+
+    /**
+     * @return \rankup\LanguageConfig
+     */
+    public function getLanguageConfig(){
+        return $this->languageConfig;
+    }
+
+    /**
+     * @param \rankup\economy\BaseEconomy $economy
+     */
+    public function setEconomy(BaseEconomy $economy){
+        $this->economy = $economy;
+    }
+
+    /**
+     * @return \rankup\economy\BaseEconomy
+     */
+    public function getEconomy(){
+        return $this->economy;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isLinkedToEconomy(){
+        return $this->economy instanceof BaseEconomy;
+    }
+
+    /**
+     * @return \rankup\economy\EconomyLoader
+     */
+    public function getEconomyLoader(){
+        return $this->economyLoader;
+    }
+
+    public function reportEconomyLinkError(){
+        $this->getLogger()->critical("The link to " . $this->economy->getName() . " has been lost. Rankup functionality is no longer available.");
+        $this->economy = false;
+    }
+
+    /**
+     * @return \rankup\rank\RankStore
+     */
+    public function getRankStore(){
+        return $this->rankStore;
+    }
+
+    /**
+     * @param \rankup\permission\BasePermissionManager $permManager
+     */
+    public function setPermManager(BasePermissionManager $permManager){
+        $this->permManager = $permManager;
+    }
+
+    /**
+     * @return \rankup\permission\BasePermissionManager
+     */
+    public function getPermManager(){
+        return $this->permManager;
+    }
+
+    /**
+     * @return \rankup\permission\PermissionLoader
+     */
+    public function getPermissionLoader(){
+        return $this->permissionLoader;
+    }
+
+    public function reportPermissionLinkError(){
+        $this->getLogger()->critical("The link to " . $this->permissionLoader->getName() . " has been lost.");
+        $this->economy = false;
+    }
+
+    public function loadRankUpDoesGroups(){
+        if($this->getConfig()->get('unleash-the-rankupdoesgroups') !== false){
+            $this->saveResource("groups.yml");
+            $this->rankUpDoesGroups = new RankUpDoesGroups(new Config($this->getDataFolder() . "/groups.yml", Config::YAML), $this->getServer()->getPluginManager()->getPermission("rankup.groups"), $this->getServer());
+            $this->getLogger()->info("Loaded DoesGroups.");
+        }
+    }
+
+    /**
+     * @return \rankup\doesgroups\RankUpDoesGroups
+     */
+    public function getRankUpDoesGroups(){
+        return $this->rankUpDoesGroups;
+    }
+
+    public function isDoesGroupsLoaded(){
+        return $this->rankUpDoesGroups instanceof RankUpDoesGroups;
+    }
+}#   _______                       __        __    __
+#  /       \                     /  |      /  |  /  |
+#  $$$$$$$  |  ______   _______  $$ |   __ $$ |  $$ |  ______
+#  $$ |__$$ | /      \ /       \ $$ |  /  |$$ |  $$ | /      \
+#  $$    $$<  $$$$$$  |$$$$$$$  |$$ |_/$$/ $$ |  $$ |/$$$$$$  |
+#  $$$$$$$  | /    $$ |$$ |  $$ |$$   $$<  $$ |  $$ |$$ |  $$ |
+#  $$ |  $$ |/$$$$$$$ |$$ |  $$ |$$$$$$  \ $$ \__$$ |$$ |__$$ |
+#  $$ |  $$ |$$    $$ |$$ |  $$ |$$ | $$  |$$    $$/ $$    $$/
+#  $$/   $$/  $$$$$$$/ $$/   $$/ $$/   $$/  $$$$$$/  $$$$$$$/
+#                                                    $$ |
+#  The easy prison rankup plugin for PocketMine-MP   $$ |
+#                                                    $$/
+
+unleash-the-rankupdoesgroups: true
+  # If you set this to false RankUpDoesGroups won't be loaded.
+  # This means that you can't set it as your groupmanager.
+  # It is highly recommended not to change this
+preferred-economy: false
+  # Set your preferred economy
+  # rankup\\economy\\Economy and rankup\\economy\\PocketMoney are available by default
+  # Set to false for autoloading (only offcially supported economys will autoload).
+preferred-groupmanager: "rankup\\permission\\RankUpDoesGroups"
+  # Set your preferred group manager
+  # rankup\\permission\\RankUpDoesGroups and rankup\\permission\\PurePerms are available.
+  # RankUpDoesGroups is a super barebones alternative for users who don't use PurePerms
+
+ranks: # Define all your ranks here
+  A: 0
+  B: 0
+  C: 15
+  D: 50
+
+lang:
+  ranked-up-paid: "You have been ranked up to %s"
+  ranked-up-free: "You have been ranked up to %s"
+  group-add-error-paid: "Failed to rankup. Refunded price."
+  group-add-error-free: "Failed to rankup. Try again later."
+  need-more-money-1: "Looks like you don't have enough money."
+  need-more-money-2: "You need %s to rank up."
+  missing-economy: "Can't purchase now."
+  have-max-rank: "You have the maximum rank."
+  command-permission-error: "You don't have permission to rankup."
+
+
+<?php
+namespace rankup;
+
+use pocketmine\utils\Config;
+
+class LanguageConfig{
+    private $lang;
+
+    public function __construct(Config $config){
+        $this->lang = $config->get('lang');
+    }
+
+    public function getLangSetting($name){
+        return $this->lang[$name];
+    }
+}#  ██████╗  █████╗ ███╗   ██╗██╗  ██╗██╗   ██╗██████╗ ██████╗  ██████╗ ███████╗███████╗ ██████╗ ██████╗  ██████╗ ██╗   ██╗██████╗ ███████╗
+#  ██╔══██╗██╔══██╗████╗  ██║██║ ██╔╝██║   ██║██╔══██╗██╔══██╗██╔═══██╗██╔════╝██╔════╝██╔════╝ ██╔══██╗██╔═══██╗██║   ██║██╔══██╗██╔════╝
+#  ██████╔╝███████║██╔██╗ ██║█████╔╝ ██║   ██║██████╔╝██║  ██║██║   ██║█████╗  ███████╗██║  ███╗██████╔╝██║   ██║██║   ██║██████╔╝███████╗
+#  ██╔══██╗██╔══██║██║╚██╗██║██╔═██╗ ██║   ██║██╔═══╝ ██║  ██║██║   ██║██╔══╝  ╚════██║██║   ██║██╔══██╗██║   ██║██║   ██║██╔═══╝ ╚════██║
+#  ██║  ██║██║  ██║██║ ╚████║██║  ██╗╚██████╔╝██║     ██████╔╝╚██████╔╝███████╗███████║╚██████╔╝██║  ██║╚██████╔╝╚██████╔╝██║     ███████║
+#  ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚═════╝  ╚═════╝ ╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝     ╚══════╝
+#
+# The really really (really) stupid group manaager. The only good part is the ascii art so enjoy it :-)
+
+groups:
+  A:
+    entrance: ["say {name} ranked up to A"]
+    exit: []
+    perms: []
+    members: []
+  B:
+    entrance: ["say {name} ranked up to B"]
+    exit: []
+    perms: []
+    members: []
+  C:
+    entrance: ["say {name} ranked up to C"]
+    exit: []
+    perms: []
+    members: []
+  D:
+    entrance: ["say {name} ranked up to D"]
+    exit: []
+    perms: []
+    members: []
+
+
+<?php
+namespace rankup\doesgroups;
+
+use pocketmine\permission\Permissible;
+use pocketmine\permission\Permission;
+use pocketmine\Player;
+use pocketmine\Server;
+use pocketmine\utils\Config;
+
+class RankUpDoesGroups{
+    /** @var \pocketmine\utils\Config  */
+    private $config;
+    /** @var \pocketmine\permission\Permission  */
+    private $groupPermission;
+    /** @var \pocketmine\Server  */
+    private $server;
+    /** @var  Group[] */
+    private $groups;
+    public function  __construct(Config $config, Permission $groupPermission, Server $server){
+        $this->config = $config;
+        $this->groupPermission = $groupPermission;
+        $this->server = $server;
+        $this->groups = [];
+        $this->initPermissions();
+    }
+    public function setPlayerGroup(Player $player, $group){
+        if(isset($this->groups[$group])){
+            $this->removeGroups($player);
+            $this->groups[$group]->addMember($player);
+            return true;
+        }
+        else{
+            return false;
+        }
+    }
+
+    public function getPlayerGroup(Player $player){
+        foreach($this->groups as $name => $group){
+            if($group->isMember($player)){
+                return $name;
+            }
+        }
+        return false;
+    }
+
+    public function getGroup($name){
+        return (isset($this->groups[$name]) ? $this->groups[$name] : false);
+    }
+    public function removeGroups(Player $player){
+        foreach($this->groups as $group){
+            if($group->isMember($player)){
+                $group->removeMember($player);
+            }
+        }
+    }
+
+    public function initPermissions(){
+        foreach($this->config->get('groups') as $name => $groupData){
+            $perms = [];
+            foreach($groupData['perms'] as $str){
+                $str = $this->getServer()->getPluginManager()->getPermission($str);
+                if($str instanceof Permission){
+                    $perms[] = $str;
+                }
+            }
+            $this->groups[$name] = new Group($this, $name, $perms, $groupData['entrance'], $groupData['exit'], $groupData['members']);
+        }
+    }
+    /*
+     * Do NOT use this function
+     */
+    public function saveMembers(){
+        $arr = $this->getConfig()->getAll();
+        foreach($this->groups as $name => $group){
+            $arr['groups'][$name]['members'] = $group->getMembers();
+        }
+        $this->getConfig()->setAll($arr);
+        $this->getConfig()->save();
+    }
+    /**
+     * @return \pocketmine\utils\Config
+     */
+    public function getConfig(){
+        return $this->config;
+    }
+
+    /**
+     * @return \pocketmine\permission\Permission
+     */
+    public function getGroupPermission(){
+        return $this->groupPermission;
+    }
+
+    /**
+     * @return \pocketmine\Server
+     */
+    public function getServer(){
+        return $this->server;
+    }
+}<?php
+namespace rankup\doesgroups;
+
+use pocketmine\command\ConsoleCommandSender;
+use pocketmine\permission\Permissible;
+use pocketmine\permission\Permission;
+use pocketmine\Player;
+
+class Group{
+    /** @var \rankup\doesgroups\RankUpDoesGroups  */
+    private $main;
+    /** @var \pocketmine\permission\Permission  */
+    private $perm;
+    /** @var Permission[]  */
+    private $permsToSet;
+    private $entrance;
+    private $exit;
+    public function __construct(RankUpDoesGroups $main, $name, $perms, $entrance, $exit, $members){
+        $this->main = $main;
+        $this->name = $name;
+        $this->permsToSet = $perms;
+        $this->entrance = $entrance;
+        $this->exit = $exit;
+        $this->members = $members;
+    }
+    public function getMembers(){
+        return $this->members;
+    }
+    public function addMember(Player $player){
+        $this->members[] = $player->getName();
+        $this->getMain()->saveMembers();
+        $attachment = $player->addAttachment($this->getMain()->getServer()->getPluginManager()->getPlugin("RankUp"));
+        foreach($this->permsToSet as $permToSet){
+            $attachment->setPermission($permToSet, true);
+        }
+        $player->removeAttachment($attachment);
+        foreach($this->entrance as $cmd){
+            $this->getMain()->getServer()->dispatchCommand(new ConsoleCommandSender(), str_replace("{name}", $player->getName(), $cmd));
+        }
+    }
+    public function removeMember(Player $player){
+        if(in_array($player->getName(), $this->members)){
+            unset($this->members[array_search($player->getName(), $this->members)]);
+            $this->getMain()->saveMembers();
+            $attachment = $player->addAttachment($this->getMain()->getServer()->getPluginManager()->getPlugin("RankUp"));
+            foreach($this->permsToSet as $permToSet){
+                $attachment->unsetPermission($permToSet);
+            }
+            $player->removeAttachment($attachment);
+            foreach($this->exit as $cmd){
+                $this->getMain()->getServer()->dispatchCommand(new ConsoleCommandSender(), str_replace("{name}", $player->getName(), $cmd));
+            }
+        }
+        else{
+            return false;
+        }
+    }
+    public function isMember(Player $player){
+        return in_array($player->getName(), $this->members);
+    }
+    /**
+     * @return mixed
+     */
+    public function getEntrance(){
+        return $this->entrance;
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getExit(){
+        return $this->exit;
+    }
+
+    /**
+     * @return \rankup\doesgroups\RankUpDoesGroups
+     */
+    public function getMain(){
+        return $this->main;
+    }
+
+    /**
+     * @return \pocketmine\permission\Permission
+     */
+    public function getPerm(){
+        return $this->perm;
+    }
+
+    /**
+     * @return \pocketmine\permission\Permission[]
+     */
+    public function getPermsToSet(){
+        return $this->permsToSet;
+    }
+
+}<?php
+namespace rankup\permission;
+
+use rankup\RankUp;
+
+class PermissionLoader{
+    private $plugin;
+    public function __construct(RankUp $plugin){
+        $this->plugin = $plugin;
+    }
+    public function load(){
+        if($this->plugin->getConfig()->get('preferred-groupmanager') !== false){
+            $name = $this->plugin->getConfig()->get('preferred-groupmanager');
+            try{
+                $permManager = new $name($this->plugin);
+                if($permManager instanceof BasePermissionManager){
+                    if($permManager->isReady()){
+                        $this->plugin->setPermManager($permManager);
+                        $this->plugin->getLogger()->info("Loaded " . $permManager->getName());
+                    }
+                    else{
+                        $this->plugin->getLogger()->critical("The preferred-groupmanager you specified is not loaded.");
+                    }
+                }
+            }
+            catch(\ClassNotFoundException $e){
+                $this->plugin->getLogger()->critical("The preferred-groupmanager you specified is not supported.");
+            }
+        }
+        else{
+            //TODO autoload PurePerms and RankUpDoesGroups
+        }
+    }
+}<?php
+namespace rankup\permission;
+use pocketmine\Player;
+
+class RankUpDoesGroups extends BasePermissionManager{
+    public function addToGroup(Player $player, $group){
+        if(!$this->checkReady()) return false;
+        return $this->getAPI()->setPlayerGroup($player, $group);
+    }
+
+    public function getGroup(Player $player){
+        if(!$this->checkReady()) return false;
+        return $this->getAPI()->getPlayerGroup($player);
+    }
+
+    public function getPlayersInGroup($name){
+        if(!$this->checkReady()) return false;
+        //TODO limit to players
+        return $this->getAPI()->getGroup($name)->getMembers();
+    }
+
+    public function getAPI(){
+        return $this->getPlugin()->getRankUpDoesGroups();
+    }
+
+    public function isReady(){
+        return $this->getPlugin()->isDoesGroupsLoaded();
+    }
+
+    public function getName(){
+        return "RankUpDoesGroups by Falk";
+    }
+}<?php
+namespace rankup\permission;
+
+use pocketmine\Player;
+use rankup\RankUp;
+
+abstract class BasePermissionManager{
+    private $plugin;
+    public function __construct(RankUp $main){
+        $this->plugin = $main;
+    }
+    public function getPlugin(){
+        return $this->plugin;
+    }
+    public abstract function addToGroup(Player $player, $group);
+    public abstract function getGroup(Player $player);
+    public abstract function getPlayersInGroup($name);
+    public abstract function getAPI();
+    public abstract function isReady();
+    public abstract function getName();
+    public function checkReady(){
+        if(!$this->isReady()){
+            $this->getPlugin()->reportPermissionLinkError();
+            return false;
+        }
+        return true;
+    }
+}<?php
+namespace rankup\economy;
+
+use rankup\RankUp;
+
+class EconomyLoader{
+    private $plugin;
+    public function __construct(RankUp $plugin){
+        $this->plugin = $plugin;
+    }
+    public function load(){
+        if($this->plugin->getConfig()->get('preferred-economy') !== false){
+            $name = $this->plugin->getConfig()->get('preferred-economy');
+            try{
+                $econ = new $name($this->plugin);
+                if($econ instanceof BaseEconomy){
+                    if($econ->isReady()){
+                        $this->plugin->setEconomy($econ);
+                        $this->plugin->getLogger()->info("Loaded " . $econ->getName());
+                    }
+                    else{
+                        $this->plugin->getLogger()->critical("The preferred-economy you specified is not loaded.");
+                    }
+                }
+            }
+            catch(\ClassNotFoundException $e){
+                $this->plugin->getLogger()->critical("The preferred-economy you specified is not supported.");
+            }
+        }
+        else{
+            /*
+             * Try loading EconomyS
+             */
+            $econ = new Economy($this->plugin);
+            if($econ->isReady()){
+                $this->plugin->setEconomy($econ);
+                $this->plugin->getLogger()->info("Loaded " . $econ->getName());
+                return;
+            }
+            /*
+             * Try loading PocketMoney
+             */
+            $econ = new PocketMoney($this->plugin);
+            if($econ->isReady()){
+                $this->plugin->setEconomy($econ);
+                $this->plugin->getLogger()->info("Loaded " . $econ->getName());
+                return;
+            }
+            $this->plugin->getLogger()->critical("No economy found, an economy is not required but certain features will be unavailable.");
+        }
+    }
+}<?php
+namespace rankup\economy;
+
+use pocketmine\Player;
+use pocketmine\plugin\PluginBase;
+
+class Economy extends BaseEconomy{
+    public function give($amt, Player $player){
+        if(!$this->checkReady()) return false;
+        return ($this->getAPI()->addMoney($player, $amt) === 1);
+    }
+    public function take($amt, Player $player){
+        if(!$this->checkReady()) return false;
+        return ($this->getAPI()->reduceMoney($player, $amt) === 1);
+    }
+    public function setBal($amt, Player $player){
+        if(!$this->checkReady()) return false;
+        return ($this->getAPI()->setMoney($player, $amt) === 1);
+    }
+    public function getBal(Player $player){
+        if(!$this->checkReady()) return false;
+        //TODO there is probably a better way to do this
+        $money = $this->getAPI()->getAllMoney();
+        if(isset($money["money"][strtolower($player->getName())])){
+            return $money["money"][strtolower($player->getName())];
+        }
+        else{
+            return false;
+        }
+    }
+    public function getAPI(){
+        return $this->getPlugin()->getServer()->getPluginManager()->getPlugin("EconomyAPI");
+    }
+    public function isReady(){
+        return ($this->getAPI() instanceof PluginBase);
+    }
+    public function getName(){
+        return "EconomyS by onebone";
+    }
+}<?php
+namespace rankup\economy;
+
+use pocketmine\Player;
+use rankup\RankUp;
+
+abstract class BaseEconomy{
+    private $plugin;
+    public function __construct(RankUp $main){
+        $this->plugin = $main;
+    }
+    public function getPlugin(){
+        return $this->plugin;
+    }
+    public abstract function give($amt, Player $player);
+    public abstract function take($amt, Player $player);
+    public abstract function setBal($amt, Player $player);
+    public abstract function getBal(Player $player);
+    public abstract function getAPI();
+    public abstract function isReady();
+    public abstract function getName();
+    public function checkReady(){
+        if(!$this->isReady()){
+            $this->getPlugin()->reportEconomyLinkError();
+            return false;
+        }
+        return true;
+    }
+}<?php
+namespace rankup\rank;
+
+use pocketmine\Player;
+use rankup\RankUp;
+
+class RankStore{
+    /** @var  Rank[] */
+    private $ranks;
+    /** @var  RankUp */
+    private $main;
+    public function __construct(RankUp $main){
+        $this->main = $main;
+    }
+
+    public function loadFromConfig(){
+        $this->ranks = [];
+        foreach($this->getMain()->getConfig()->get('ranks') as $name => $price){
+            $this->ranks[] = new Rank($name, count($this->ranks), $price);
+        }
+        $this->getMain()->getLogger()->info("Loaded " . count($this->ranks) . " ranks.");
+    }
+    public function getRankByName($name){
+        foreach($this->ranks as $rank){
+            if(strtolower($rank->getName()) === strtolower($name)){
+                return $rank;
+            }
+        }
+        return false;
+    }
+    /**
+     * @return \rankup\RankUp
+     */
+    public function getMain(){
+        return $this->main;
+    }
+    public function getNextRank(Player $player){
+        //TODO check if perm is linked
+        $group = $this->getMain()->getPermManager()->getGroup($player);
+        if($group !== false){
+            $rank = $this->getRankByName($group);
+            if($rank !== false){
+                if($rank->getOrder() == count($this->ranks)-1){
+                    return false;
+                }
+                else{
+                    return $this->ranks[$rank->getOrder()+1];
+                }
+            }
+            else{
+                return $this->ranks[0];
+            }
+        }
+        else{
+            return $this->ranks[0];
+        }
+    }
+}<?php
+namespace rankup\rank;
+
+class Rank{
+    private $name;
+    private $price;
+    private $order;
+
+    public function __construct($name, $order, $price){
+        $this->name = $name;
+        $this->order = $order;
+        $this->price = $price;
+    }
+
+    /**
+     * @param mixed $name
+     */
+    public function setName($name){
+        $this->name = $name;
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getName(){
+        return $this->name;
+    }
+
+    /**
+     * @param mixed $order
+     */
+    public function setOrder($order){
+        $this->order = $order;
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getOrder(){
+        return $this->order;
+    }
+
+    /**
+     * @param mixed $price
+     */
+    public function setPrice($price){
+        $this->price = $price;
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getPrice(){
+        return $this->price;
+    }
+
+}<?php
+namespace rankup\command;
+
+use pocketmine\command\Command;
+use pocketmine\command\CommandSender;
+use pocketmine\command\PluginIdentifiableCommand;
+use pocketmine\Player;
+use rankup\RankUp;
+
+class RankUpCommand extends Command implements PluginIdentifiableCommand{
+    private $main;
+    public function __construct(RankUp $main){
+        parent::__construct("rankup", "Get all the ranks.", "/rankup", ["ru"]);
+        $this->main = $main;
+    }
+    public function execute(CommandSender $sender, $label, array $args){
+        if ($sender instanceof Player && count($args) == 0 || !$sender->hasPermission("rankup.admin")) {
+            if ($sender->hasPermission("rankup.rankup")) {
+                $nextRank = $this->getPlugin()->getRankStore()->getNextRank($sender);
+                //$sender->sendMessage($nextRank->getName());
+                if ($nextRank !== false) {
+                    if ($nextRank->getPrice() == 0 || $this->getPlugin()->isLinkedToEconomy()) {
+                        if ($nextRank->getPrice() > 0) {
+                            if ($this->getPlugin()->getEconomy()->take($nextRank->getPrice(), $sender) !== false) {
+                                if ($this->getPlugin()->getPermManager()->addToGroup($sender, $nextRank->getName()) !== false) {
+                                    $sender->sendMessage(sprintf($this->getPlugin()->getLanguageConfig()->getLangSetting('ranked-up-paid'), $nextRank->getName()));
+                                } else {
+                                    $sender->sendMessage($this->getPlugin()->getLanguageConfig()->getLangSetting('group-add-error-paid'));
+                                    $this->getPlugin()->getEconomy()->give($nextRank->getPrice(), $sender);
+                                }
+                            } else {
+                                $sender->sendMessage($this->getPlugin()->getLanguageConfig()->getLangSetting('need-more-money-1'));
+                                $sender->sendMessage(sprintf($this->getPlugin()->getLanguageConfig()->getLangSetting('need-more-money-2'), $nextRank->getPrice() - $this->getPlugin()->getEconomy()->getBal($sender)));
+                            }
+                        } else {
+                            if ($this->getPlugin()->getPermManager()->addToGroup($sender, $nextRank->getName()) !== false) {
+                                $sender->sendMessage(sprintf($this->getPlugin()->getLanguageConfig()->getLangSetting('ranked-up-free'), $nextRank->getName()));
+                            } else {
+                                $sender->sendMessage($this->getPlugin()->getLanguageConfig()->getLangSetting('group-add-error-free'));
+                            }
+                        }
+                    } else {
+                        $sender->sendMessage($this->getPlugin()->getLanguageConfig()->getLangSetting('missing-economy'));
+                    }
+                } else {
+                    $sender->sendMessage($this->getPlugin()->getLanguageConfig()->getLangSetting('have-max-rank'));
+                }
+            } else {
+                $sender->sendMessage($this->getPlugin()->getLanguageConfig()->getLangSetting('command-permission-error'));
+            }
+        } else {
+            $sender->sendMessage("Cool stats and details go here :-)");
+        }
+
+    }
+    public function getPlugin(){
+        return $this->main;
+    }
+}

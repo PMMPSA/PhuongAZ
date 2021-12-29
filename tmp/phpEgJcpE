@@ -1,0 +1,1505 @@
+name: KillRate
+version: 2.1.1
+main: aliuly\killrate\Main
+api: 2.0.0
+load: POSTWORLD
+# You have to have at least one of these...
+softdepend: [PocketMoney,MassiveEconomy,EconomyAPI,GoldStd,RankUp]
+
+description: Keep track of the number of kills
+author: aliuly
+website: https://github.com/alejandroliu/pocketmine-plugins/tree/master/KillRate
+
+commands:
+  killrate:
+    description: Show kill rate stats
+    usage: "/killrate [stats|top|give]"
+    aliases: [kr]
+    permission: killrate.cmd
+
+permissions:
+  killrate.cmd:
+    default: true
+    description: "Give players access to KillRate command"
+  killrate.cmd.stats:
+    default: true
+    description: "Access to stats command"
+  killrate.cmd.stats.other:
+    default: op
+    description: "View other's stats"
+  killrate.cmd.rank:
+    default: true
+    description: "View top players"
+  killrate.cmd.give:
+    default: op
+    description: "Give points to players"
+  killrate.signs.place:
+    default: op
+    description: "Allow to place KillRate signs"
+  killrate.signs.use:
+    default: true
+    description: "Allow to use KillRate signs"
+<?php
+namespace aliuly\killrate;
+
+use pocketmine\plugin\PluginBase;
+use pocketmine\command\CommandExecutor;
+use pocketmine\command\ConsoleCommandSender;
+use pocketmine\command\CommandSender;
+use pocketmine\command\Command;
+use pocketmine\utils\TextFormat;
+
+use pocketmine\Player;
+use pocketmine\Server;
+use pocketmine\event\Listener;
+use pocketmine\utils\Config;
+
+use pocketmine\event\entity\EntityDamageEvent;
+use pocketmine\event\entity\EntityDeathEvent;
+use pocketmine\event\player\PlayerDeathEvent;
+use pocketmine\entity\Projectile;
+
+use aliuly\killrate\common\mc;
+use aliuly\killrate\common\mc2;
+use aliuly\killrate\common\MPMU;
+use aliuly\killrate\common\MoneyAPI;
+
+use aliuly\killrate\api\KillRate as KillRateAPI;
+use aliuly\killrate\api\KillRateScoreEvent;
+use aliuly\killrate\api\KillRateResetEvent;
+
+class Main extends PluginBase implements CommandExecutor,Listener {
+	protected $dbm;
+	public $api;
+
+	protected $money;
+	protected $signmgr;
+	protected $achievements;
+	protected $ranks;
+	protected $kstreak;
+
+	protected $settings;
+	protected $prizes;
+
+	//////////////////////////////////////////////////////////////////////
+	//
+	// Standard call-backs
+	//
+	//////////////////////////////////////////////////////////////////////
+	public function onEnable(){
+		$this->dbm = null;
+		if (!is_dir($this->getDataFolder())) mkdir($this->getDataFolder());
+
+		mc2::plugin_init_alt($this,$this->getFile());
+
+		$this->api = new KillRateAPI($this);
+		$this->getServer()->getPluginManager()->registerEvents($this, $this);
+		$defaults = [
+			"version" => $this->getDescription()->getVersion(),
+			//= cfg:features
+			"features" => [
+				"# signs" => "enable/disable signs",
+				"signs" => true,
+				"# ranks" => "Enable support for RankUp plugin",
+				"ranks" => false,
+				"# achievements" => "Enable PocketMine achievements",
+				"achievements" => true,
+				"# kill-streak" => "Enable kill-streak tracking.", // tracks the number of kills without dying
+				"kill-streak" => false,
+				"# rewards" => "award money.", // if true, money is awarded.  Requires an economy plugin
+				"rewards" => true,
+			],
+			//= cfg:settings
+			"settings" => [
+				"# points" => "award points.", // if true points are awarded and tracked.
+				"points" => true,
+				"# min-kills" => "Minimum number of kills before declaring a kill-streak",
+				"min-kills" => 7,
+				"# reset-on-death" => "Reset counters on death.", // Set to false to disable, otherwise the number of deaths till reset. When the player dies X number of times, scores will reset.  (GAME OVER MAN!)
+				"reset-on-death" => false,
+				"# creative" => "track creative kills.", // if true, kills done by players in creative are scored
+				"creative" => false,
+				"# dynamic-updates" => "Update signs.", // Set to 0 or false to disable, otherwise sign update frequence in ticks
+				"dynamic-updates" => 80,
+				"# default-rank" => "Default rank (when resetting ranks)", // set to **false** to disable this feature
+				"default-rank" => false,
+			],
+			//= cfg:values
+			//:
+			//: Configure awards for the different type of kills.  Format:
+			//:
+			//:     "entity": [ money, points ]
+			//:
+			//: The entity ( * ) is the default.
+			"values" => [
+				"<Example>" => [ "money" , "points" ],
+				"*" => [ 1, 10 ],	// Default
+				"Player" => [ 100, 100 ],
+			],
+			//= cfg:formats
+			//: Sign formats used to show sign data.
+			"formats" => [
+				"default" => "{sname} {count}",
+				"names" => "{n}.{player}",
+				"scores" => "{count}",
+			],
+			//= cfg:database
+			"database" => [
+				"# backend" => "Use SQLiteMgr or MySqlMgr",
+				"backend" => "SQLiteMgr",
+				"# MySql" => "MySQL settings.", // Only used if backend is MySqlMgr to configure MySql settings
+				"MySql" => [
+					"host" => "localhost",
+					"user" => "nobody",
+					"password" => "secret",
+					"database" => "KillRateDb",
+					"port" => 3306,
+				],
+			],
+			//= cfg:signs
+			//: Placed signs text.
+			//: These are used to configure sign texts.  Place signs with the
+			//: words on the left, and the sign type (on the right) will be
+			//: created
+			"signs" => [
+				"[STATS]" => "stats",
+				"[ONLINE TOPS]" => "online-tops",
+				"[RANKINGS]" => "rankings",
+				"[RANKNAMES]" => "rankings-names",
+				"[RANKPOINTS]" => "rankings-points",
+				"[TOPNAMES]" => "online-top-names",
+				"[TOPPOINTS]" => "online-top-points",
+			],
+		];
+		$cfg = (new Config($this->getDataFolder()."config.yml",
+										 Config::YAML,$defaults))->getAll();
+		if (version_compare($cfg["version"],"2.1") < 0) {
+			$this->getLogger()->warning(TextFormat::RED.mc::_("Configuration has been changed"));
+			$this->getLogger()->warning(mc::_("It is recommended to delete old config.yml"));
+		}
+
+		$backend = __NAMESPACE__."\\".$cfg["database"]["backend"];
+		$this->dbm = new $backend($this,$cfg["database"]);
+		$this->getLogger()->info(mc::_("Using %1% as backend",$cfg["database"]["backend"]));
+
+		$this->money = null;
+		if (isset($cfg["features"]["rewards"])) {
+			$this->money = MoneyAPI::moneyPlugin($this);
+			if ($this->money) {
+				MoneyAPI::foundMoney($this,$this->money);
+			} else {
+				MoneyAPI::noMoney($this);
+				$this->money = null;
+			}
+		}
+		$this->signmgr = $cfg["features"]["signs"] ? new SignMgr($this,$cfg) : null;
+
+		$this->achievements = new AchievementsGiver($this,$cfg["features"]["achievements"]);
+		$this->ranks = new RankMgr($this,$cfg["features"]["ranks"],$cfg["settings"]);
+		$this->settings = $cfg["settings"];
+		$this->prizes = $cfg["values"];
+		$this->kstreak = new KillStreak($this,$cfg["features"]["kill-streak"],$cfg["settings"],$this->money);
+	}
+	public function onDisable() {
+		if ($this->dbm !== null) $this->dbm->close();
+		$this->dbm = null;
+	}
+
+	public function getMoneyPlugin() {
+		return $this->money;
+	}
+
+	public function onCommand(CommandSender $sender, Command $cmd, $label, array $args) {
+		switch($cmd->getName()) {
+			case "killrate":
+				if (count($args) == 0) return $this->cmdStats($sender,[]);
+				$scmd = strtolower(array_shift($args));
+				switch ($scmd) {
+					case "stats":
+						if (!MPMU::access($sender,"killrate.cmd.stats")) return true;
+						return $this->cmdStats($sender,$args);
+					case "top":
+					case "ranking":
+						if (!MPMU::access($sender,"killrate.cmd.rank")) return true;
+						return $this->cmdTops($sender,$args);
+					case "give":
+						if (!MPMU::access($sender,"killrate.cmd.give")) return true;
+						if (count($args) == 1 || count($args) > 3) return false;
+						if (count($args) == 2) {
+							list($player,$points) = $args;
+							$type = "points";
+						} else {
+							list($player,$points,$type) = $args;
+						}
+						if (!is_numeric($points)) return true;
+						$player = $this->getServer()->getPlayer($player);
+						if ($player == null) {
+							$sender->sendMessage(TextFormat::RED.$args[0]." does not exist");
+							return true;
+						}
+						$points = intval($points);
+						$this->updateDb($player->getname(),$type,$points);
+						$sender->sendMessage(TextFormat::GREEN.mc::_("Awarding %1% %2% to %3%", $points, $type,$player->getDisplayName() ));
+						$player->sendMessage(TextFormat::YELLOW.mc::_("You have been awarded %1% %2% by %3%", $points, $type,$sender->getName() ));
+						return true;
+					case "help":
+						return $this->cmdHelp($sender,$args);
+					default:
+						$sender->sendMessage(mc::_("Unknown command.  Try /killrate help"));
+						return false;
+				}
+		}
+		return false;
+	}
+	//////////////////////////////////////////////////////////////////////
+	//
+	// Command implementations
+	//
+	//////////////////////////////////////////////////////////////////////
+	private function cmdHelp(CommandSender $sender,$args) {
+		$cmds = [
+			"stats" => ["[player ...]",mc::_("Show player scores")],
+			"top" => ["[online]",mc::_("Show top players")],
+		];
+		if (count($args)) {
+			foreach ($args as $c) {
+				if (isset($cmds[$c])) {
+					list($a,$b) = $cmds[$c];
+					$sender->sendMessage(TextFormat::RED.
+												mc::_("Usage: /killrate %1% %2%",$c,$a).
+												TextFormat::RESET);
+					$sender->sendMessage($b);
+				} else {
+					$sender->sendMessage(mc::_("Unknown command %1%",$c));
+				}
+			}
+			return true;
+		}
+		$sender->sendMessage(mc::_("KillRate sub-commands"));
+		foreach ($cmds as $a => $b) {
+			$sender->sendMessage("- ".TextFormat::GREEN."/killrate ".$a.
+										TextFormat::RESET." ".$b[0]);
+		}
+		return true;
+	}
+	private function cmdTops(CommandSender $c,$args) {
+		if (count($args) == 0) {
+			$res = $this->getRankings(5);
+		} else {
+			$res = $this->getRankings(5,true);
+			if ($res == null) {
+				$c->sendMessage(mc::_("Not enough on-line players"));
+				return true;
+			}
+		}
+		$c->sendMessage(mc::_(". Player Points"));
+		$i = 1;
+		foreach ($res as $r) {
+			$c->sendMessage(implode(" ",[$i++,$r["player"],$r["count"]]));
+		}
+		return true;
+	}
+	private function cmdStats(CommandSender $c,$args) {
+		if (count($args) == 0) {
+			if (!MPMU::inGame($c)) return true;
+			$args = [ $c->getName() ];
+		}
+		foreach ($args as $pl) {
+			if (MPMU::inGame($c,false) && $pl != $c->getName()) {
+				if (!MPMU::access($c,"killrate.cmd.stats.other")) return true;
+			}
+			$score = $this->dbm->getScores($pl);
+			if ($score == null) {
+				$c->sendMessage(mc::_("No scores found for %1%",$pl));
+				continue;
+			} else {
+				if (count($args) != 1) $c->sendMessage(TextFormat::BLUE.$pl);
+				list($k,$d) = [null,null];
+				foreach ($score as $row) {
+					if ($row["type"] == "player") $k = (float)$row["count"];
+					if ($row["type"] == "deaths") $d = $row["count"];
+					$c->sendMessage(TextFormat::GREEN.$row['type'].": ".
+										 TextFormat::WHITE.$row['count']);
+				}
+				if ($k !== null && $d !== null && $d > 0) {
+					$c->sendMessage(TextFormat::GREEN.mc::_("kdratio: ").
+										 TextFormat::WHITE.round($k/$d,2));
+				}
+			}
+		}
+		return true;
+	}
+
+	//////////////////////////////////////////////////////////////////////
+	//
+	// Event handlers
+	//
+	//////////////////////////////////////////////////////////////////////
+	public function announce($pp,$points,$money) {
+		if ($points) {
+			if ($points > 0) {
+				$pp->sendMessage(TextFormat::BLUE.mc::n(mc::_("one point awarded!"),
+											  mc::_("%1% points awarded!",$points),
+											  $points));
+			} else {
+				$pp->sendMessage(TextFormat::RED.mc::n(mc::_("one point deducted!"),
+											  mc::_("%1% points deducted!",$points),
+											  $points));
+			}
+		}
+		if ($money) {
+			if ($money > 0) {
+				$pp->sendMessage(TextFormat::GREEN.mc::n(mc::_("You earn \$1"),
+											  mc::_("You earn \$%1%", $money), $money));
+			} else {
+				$pp->sendMessage(TextFormat::YELLOW.mc::n(mc::_("You are fined \$1"),
+											  mc::_("You are fined \$%1%",$money),
+											  $money));
+			}
+		}
+	}
+
+	public function getPrizes($vic) {
+		if (isset($this->prizes[$vic])) {
+			return $this->prizes[$vic];
+		}
+		if (isset($this->prizes["*"])) {
+			return $this->prizes["*"];
+		}
+		return [0,0];
+	}
+	public function updateScores($player, $perp,$vic) {
+		if ($this->settings["points"] || $this->money !== null){
+			list($points,$money) = $this->getPrizes($vic);
+			if (!$this->settings["points"]) $points = false;
+			if (!$this->money !== null) $money = false;
+		} else {
+			list($points,$money) = [false,false];
+		}
+		$this->getServer()->getPluginManager()->callEvent(
+				$ev = new KillRateScoreEvent($this,$player,$vic,$points,$money)
+		);
+		if ($ev->isCancelled()) return [false,false];
+		if ($ev->getIncr())
+			$kills = $this->updateDb($perp,$vic,$ev->getIncr());
+		else
+			$kills = null;
+		$awards = [ false,false];
+    $awards[0] = $points = $ev->getPoints();
+
+		if ($points !== false && $points != 0)
+			$newscore = $this->updateDb($perp,"points", $points);
+		else
+			$newscore = null;
+		$awards[1] = $money = $ev->getMoney();
+		if ($money !== false) MoneyAPI::grantMoney($this->money,$perp,$money);
+
+		$this->achievements->awardKills($player,$vic, $kills);
+		if ($newscore !== null) $this->ranks->promote($player,$newscore);
+
+		return $awards;
+	}
+	/**
+	 * @priority MONITOR
+	 */
+	public function onPlayerDeath(PlayerDeathEvent $e) {
+		$this->deadDealer($e->getEntity());
+	}
+	/**
+	 * @priority MONITOR
+	 */
+	public function onDeath(EntityDeathEvent $e) {
+		$this->deadDealer($e->getEntity());
+	}
+	public function deadDealer($pv) {
+		if ($pv instanceof Player) {
+			// Score that this player died!
+			$deaths = $this->updateDb($pv->getName(),"deaths");
+			if ($this->settings["reset-on-death"]
+				 && $this->settings["reset-on-death"] > 0) {
+				if ($deaths >= $this->settings["reset-on-death"]) {
+					// We died too many times... reset scores...
+					$this->getServer()->getPluginManager()->callEvent(
+						$ev = new KillRateResetEvent($this,$pv)
+					);
+					if (!$ev->isCancelled()) {
+						$this->delScore($pv->getName());
+						$this->ranks->resetRank($pv);
+						$pv->sendMessage(mc::_("GAME OVER!!!"));
+						$this->getServer()->broadcastMessage(mc::n(
+										mc::_("%1% died. RIP!", $pv->getDisplayName()),
+										mc::_("%1% died %2% times. RIP!",  $pv->getDisplayName(), $deaths),
+										$deaths));
+					}
+				}
+			}
+			$this->kstreak->endStreak($pv);
+		}
+		$cause = $pv->getLastDamageCause();
+		// If we don't know the real cause, we can score it!
+		if (!($cause instanceof EntityDamageEvent)) return;
+
+		switch ($cause->getCause()) {
+			case EntityDamageEvent::CAUSE_PROJECTILE:
+				$pp = $cause->getDamager();
+				break;
+			case EntityDamageEvent::CAUSE_ENTITY_ATTACK:
+				$pp = $cause->getDamager();
+				break;
+			case EntityDamageEvent::CAUSE_ENTITY_EXPLOSION:
+				$pp = $cause->getDamager();
+				if ($pp instanceof Projectile) {
+					$pp = $pp->shootingEntity;
+				}
+				break;
+			default:
+				return;
+		}
+		if (!($pp instanceof Player)) return; // Not killed by player...
+		// No scoring for creative players...
+		if ($pp->isCreative() && !$this->settings["creative"]) return;
+
+		$perp = $pp->getName();
+		$vic = $pv->getName();
+		if ($pv instanceof Player) {
+			$vic = "Player";
+			// OK killed a player... check for a kill streak...
+			$pv->sendMessage(TextFormat::RED.mc::_("You were killed by %1%!",
+																$pp->getName()));
+			if ($this->kstreak->scoreStreak($pp)) {
+				$this->achievements->awardSerialKiller($pp);
+			}
+		}
+		$perp = $pp->getName();
+
+		list ($points,$money) = $this->updateScores($pp,$perp,$vic);
+		$this->announce($pp,$points,$money);
+	}
+
+	//////////////////////////////////////////////////////////////////////
+	// API functions
+	//////////////////////////////////////////////////////////////////////
+	public function getRankings($limit=10,$online=false,$col = "points") {
+	  if ($online) {
+		  // Online players only...
+		  $plist = [];
+		  foreach ($this->getServer()->getOnlinePlayers() as $p) {
+			  $plist[] = $p->getName();
+		  }
+		  if (count($plist) < 2) return null;
+	  } else {
+		  $plist = null;
+	  }
+	  //print_r([$limit,$plist]);
+	  return $this->dbm->getTops($limit,$plist,$col);
+  }
+	public function updateDb($perp,$vic,$incr = 1) {
+		$score = $this->dbm->getScore($perp,$vic);
+		if ($score) {
+			$this->dbm->updateScore($perp,$vic,$score["count"]+$incr);
+			return $score["count"]+$incr;
+		}
+		$this->dbm->insertScore($perp,$vic,$incr);
+		return $incr;
+
+	}
+	/**
+	 * @deprecated
+	 */
+	public function getScore($pn,$type = "points") {
+		if ($pn instanceof Player) $pn = $pn->getName();
+		$score = $this->dbm->getScore($pn,$type);
+		if ($score) return $score["count"];
+		return 0;
+	}
+	public function getScoreV2($pn,$type = "points") {
+		$score = $this->dbm->getScore($pn,$type);
+		if ($score) return $score["count"];
+		return 0;
+	}
+	public function setScore($pn,$val,$type = "points") {
+		$score = $this->dbm->getScore($pn,$type);
+		if ($score) {
+			$this->dbm->updateScore($pn,$type,$val);
+		}
+		$this->dbm->insertScore($pn,$type,$val);
+	}
+	public function delScore($pn, $type = null) {
+		$this->dbm->delScore($pn, $type);
+	}
+	public function getScores($pn) {
+		return $this->dbm->getScores($pn);
+	}
+	public function getPlayerVarsV1(Player $player, array &$vars) {
+		$vars["{score}"] = $this->getScore($player);
+	}
+	public function getSysVarsV1(array &$vars) {
+		$ranks = $this->getRankings(10);
+		if ($ranks == null) {
+			$vars["{tops}"] = "N/A";
+			$vars["{top10}"] = "N/A";
+			$vars["{top10names}"] = "N/A";
+		  $vars["{top10scores}"] = "N/A";
+		} else {
+			$vars["{tops}"] = "";
+			$vars["{top10}"] = "";
+			$vars["{top10names}"] = "";
+		  $vars["{top10scores}"] = "";
+			$i = 1; $q = "";
+			foreach ($ranks as $r) {
+				if ($i <= 3) {
+					$vars["{tops}"] .= $q.$i.". ".substr($r["player"],0,8).
+									" ".$r["count"];
+					$q = "   ";
+				}
+				$vars["{top10}"] .= $i.". ".$r["player"]." ".$r["count"]."\n";
+				$vars["{top10names}"] .= $r["player"]."\n";
+			  $vars["{top10scores}"] .= $r["count"]."\n";
+				++$i;
+			}
+		}
+	}
+}
+<?php
+namespace aliuly\killrate\common;
+
+use pocketmine\utils\TextFormat;
+use aliuly\killrate\common\mc;
+
+/**
+ * Very PocketMine-MP specific extension to the mc package
+ */
+abstract class mc2 {
+	/**
+	 * Checks message files and nags the user to submit translations...
+	 *
+	 * @param Plugin $plugin - owning plugin
+	 * @param str $path - output of $plugin->getFile()
+	 * @return int|false - false on error or the number of messages loaded
+	 */
+	public static function plugin_init_alt($plugin,$path) {
+		$lang = $plugin->getServer()->getProperty("settings.language");
+		if (mc::plugin_init($plugin,$path) === false && $lang != "eng") {
+			list($fp,$fill) = [$plugin->getResource("messages/eng.ini"),"English"];
+			if ($fp === null) list($fp,$fill) = [ $plugin->getResource("messages/messages.ini"),"EMPTY"];
+			if ($fp === null) return false;
+			file_put_contents($plugin->getDataFolder()."messages.ini",stream_get_contents($fp)."\n\"<nagme>\"=\"yes\"\n");
+			mc::plugin_init($plugin,$path);
+			$plugin->getLogger()->error(TextFormat::RED."Your selected language \"".$lang."\" is not supported");
+			$plugin->getLogger()->error(TextFormat::YELLOW."Creating a custom \"messages.ini\" with ".$fill." strings");
+			$plugin->getLogger()->error(TextFormat::AQUA."Please consider translating and submitting a translation");
+			$plugin->getLogger()->error(TextFormat::AQUA."to the developer");
+			$plugin->getLogger()->error(TextFormat::YELLOW."If you later change your language in \"pocketmine.yml\"");
+			$plugin->getLogger()->error(TextFormat::YELLOW."make sure you delete this \"messages.ini\"");
+			$plugin->getLogger()->error(TextFormat::YELLOW."otherwise your changes will not be recognized");
+			return;
+		}
+		if (mc::_("<nagme>") !== "yes") return;
+
+		// Potentially the language may exists since this was created...
+		$fp = $plugin->getResource("messages/".$lang.".ini");
+		if($fp === null && $lang != "eng"){
+			$plugin->getLogger()->error(TextFormat::RED."Your selected language \"".$lang."\" is not supported");
+			$plugin->getLogger()->error(TextFormat::AQUA."Please consider translating \"messages.ini\"");
+			$plugin->getLogger()->error(TextFormat::AQUA."and submitting a translation to the  developer");
+			return;
+		}
+		if ($fp !== null) fclose($fp);
+		// This language is actually supported...
+		$plugin->getLogger()->error(TextFormat::RED."Using a supported language: \"".$lang."\"");
+		$plugin->getLogger()->error(TextFormat::YELLOW."Saving/Fixing \"messages.ini\" as");
+		$plugin->getLogger()->error(TextFormat::YELLOW."\"messages.bak\"...");
+		$orig = file_get_contents($plugin->getDataFolder()."messages.ini");
+		file_put_contents($plugin->getDataFolder()."messages.bak",strtr($orig,["<nagme>"=>"<don't nagme>"]));
+		unlink($plugin->getDataFolder()."messages.ini");
+	}
+}
+<?php
+//= api-features
+//: - Translations
+
+namespace aliuly\killrate\common;
+
+/**
+ * Simple translation class in the style of **gettext**.
+ *
+ * You can actually use **gettext** tools to process these files.
+ * For example, to create/update a message catalogue use:
+ *
+ * `xgettext --no-wrap [-j] [-o file]`
+ *
+ * Where -j is used to join an existing catalague.
+ * -o file is the output file.
+ *
+ * Basic usage:
+ *
+ * * mc::load("messages.po|messages.ini");
+ * * mc::plugin_init($plugin,$plugin->getFile());
+ * * mc::_("string to translate\n")
+ * * mc::_("string to translate %1% %2%\n",$arg1,$arg2)
+ * * mc::n(mc::\_("singular form"),mc::\_("Plural form"),$count)
+ */
+abstract class mc {
+	/** @var str[] $txt Message translations */
+	public static $txt = [];
+	/** Main translation function
+	 *
+	 * This translates strings.  The naming of "_" is to make it compatible
+	 * with gettext utilities.  The string can contain "%1%", "%2%, etc...
+	 * These are inserted from the following arguments.  Use "%%" to insert
+	 * a single "%".
+	 *
+	 * @param str[] $args - messages
+	 * @return str translated string
+	 */
+	public static function _(...$args) {
+		$fmt = array_shift($args);
+		if (isset(self::$txt[$fmt])) $fmt = self::$txt[$fmt];
+		if (count($args)) {
+			$vars = [ "%%" => "%" ];
+			$i = 1;
+			foreach ($args as $j) {
+				$vars["%$i%"] = $j;
+				++$i;
+			}
+			$fmt = strtr($fmt,$vars);
+		}
+		return $fmt;
+	}
+	/**
+	 * Plural and singular forms.
+	 *
+	 * @param str $a - Singular form
+	 * @param str $b - Plural form
+	 * @param int $c - the number to test to select between $a or $b
+	 * @return str - Either plural or singular forms depending on the value of $c
+	 */
+	public static function n($a,$b,$c) {
+		return $c == 1 ? $a : $b;
+	}
+	/**
+	 * Load a message file for a PocketMine plugin.  Only uses .ini files.
+	 *
+	 * @param Plugin $plugin - owning plugin
+	 * @param str $path - output of $plugin->getFile()
+	 * @return int|false - false on error or the number of messages loaded
+	 */
+	public static function plugin_init($plugin,$path) {
+		if (file_exists($plugin->getDataFolder()."messages.ini")) {
+			return self::load($plugin->getDataFolder()."messages.ini");
+		}
+		$msgs = $path."resources/messages/".
+				$plugin->getServer()->getProperty("settings.language").
+				".ini";
+		if (!file_exists($msgs)) return false;
+		return self::load($msgs);
+	}
+
+	/**
+	 * Load the specified message catalogue.
+	 * Can read .ini or .po files.
+	 * @param str $f - Filename to load
+	 * @return int|false - returns the number of strings loaded or false on error
+	 */
+	public static function load($f) {
+		$potxt = "\n".file_get_contents($f)."\n";
+		if (preg_match('/\nmsgid\s/',$potxt)) {
+			$potxt = preg_replace('/\\\\n"\n"/',"\\n",
+										 preg_replace('/\s+""\s*\n\s*"/'," \"",
+														  $potxt));
+		}
+		foreach (['/\nmsgid "(.+)"\nmsgstr "(.+)"\n/',
+					 '/^\s*"(.+)"\s*=\s*"(.+)"\s*$/m'] as $re) {
+			$c = preg_match_all($re,$potxt,$mm);
+			if ($c) {
+				for ($i=0;$i<$c;++$i) {
+					if ($mm[2][$i] == "") continue;
+					eval('$a = "'.$mm[1][$i].'";');
+					eval('$b = "'.$mm[2][$i].'";');
+					self::$txt[$a] = $b;
+				}
+				return $c;
+			}
+		}
+		return false;
+	}
+}
+<?php
+namespace aliuly\killrate\api;
+
+use aliuly\killrate\Main as KillRatePlugin;
+use pocketmine\IPlayer;
+
+/**
+ * KillRate API
+ */
+class KillRate {
+  protected $plugin;
+  /**
+   * @param KillRatePlugin $owner - plugin that owns this session
+   */
+  public function __construct(KillRatePlugin $owner) {
+    $this->plugin = $owner;
+  }
+  /**
+   * Show rankings
+   *
+   * Returns an array with each element having a ["player"] and ["count"].
+   *
+   * @param int $limit - Max number of players to rank
+   * @param bool $online - if true limit rankings to on-line players
+   * @param str $col - Type of data to return
+   * @return array
+   */
+  public function getRankings($limit=10,$online=false,$col = "points") {
+    return $this->plugin->getRankings($limit,$online,$col);
+  }
+  /**
+   * Return ranked scores
+   *
+   * Returns an array with each element having a ["player_name"] and
+   * all the values from `getScores`.
+   *
+   * @param int $limit - Max number of players to rank
+   * @param bool $online - if true limit rankings to on-line players
+   * @param str $col - Type of data to sort
+   * @return array
+   */
+  public function getRankedScores($limit=10,$online=false,$col = "points") {
+    $tab =  $this->plugin->getRankings($limit,$online,$col);
+    $res = [];
+    foreach ($tab as $n) {
+      $pn = $n["player"];
+      $scores = $this->plugin->getScores($pn);
+      if ($scores == null) continue;
+      $row = [ "player_name" => $pn ];
+      foreach ($scores as $dt) {
+        $row[$dt["type"]] = $dt["count"];
+      }
+      if (isset($row["deaths"]) && isset($row["player"]) && $row["deaths"] != 0) {
+        $row["kdratio"] = round((float)$row["player"]/$row["deaths"],2);
+      }
+      $res[] = $row;
+    }
+    return $res;
+  }
+  /**
+   * Update Database values.  Returns the new updated value.
+   * @param IPlayer|str $player - Player that is scoring
+   * @param str $col - Type of data to update
+   * @param int $incr - Amount to increment
+   * @return int
+   */
+	public function updateScore($player,$col = "points",$incr = 1) {
+    if ($player instanceof IPlayer) $player = $player->getName();
+    return $this->plugin->updateDb($player, $col, $incr);
+  }
+  /**
+   * Update Database values.
+   * @param IPlayer|str $player - Player that is scoring
+   * @param int $val - Value to set to
+   * @param str $col - Type of data to update
+   */
+	public function setScore($player,$val, $col = "points") {
+    if ($player instanceof IPlayer) $player = $player->getName();
+    return $this->plugin->setScore($player, $val, $col);
+  }
+  /**
+   * Returns a player's specific score.
+   * @param IPlayer|str $player - Player that is scoring
+   * @param str $col - Type of data to update
+   * @return int|float
+   */
+	public function getScore($player,$col = "points") {
+    if ($col == "kdratio") return $this->getKDRatio($player);
+    if ($player instanceof IPlayer) $player = $player->getName();
+    return $this->plugin->getScoreV2($player);
+	}
+  /**
+   * Get KillDeath Ratio
+   * @param IPlayer|str $player - Player that is scoring
+   * @return int|null
+   */
+  public function getKDRatio($player) {
+    if ($player instanceof IPlayer) $player = $player->getName();
+    $d = $this->plugin->getScoreV2($player,"deaths");
+    $k = (float)$this->plugin->getScoreV2($player,"player");
+    if ($d == 0) return null;
+    return round($k/$d,2);
+  }
+  /**
+   * Returns a player's specific score.
+   * @param IPlayer|str $player - Player that is scoring
+   * @param str $col - Type of data to update
+   * @return int
+   */
+	public function delScore($pl, $type = null) {
+    if ($player instanceof IPlayer) $player = $player->getName();
+		$this->plugin->delScore($player, $type);
+	}
+}
+<?php
+
+namespace aliuly\killrate;
+use pocketmine\plugin\PluginBase;
+
+class SQLiteMgr implements DatabaseManager {
+	private $database;
+
+	static function prepare($player) {
+		return "'".\SQLite3::escapeString(strtolower($player))."'";
+	}
+	public function close() {
+		$this->database->close();
+		unset($this->database);
+	}
+
+	public function __construct(PluginBase $owner,$ignored){
+		$path = $owner->getDataFolder()."stats.sqlite3";
+		$this->database = new \SQLite3($path);
+		$sql = "CREATE TABLE IF NOT EXISTS Scores (
+			player TEXT NOT NULL,
+			type TEXT NOT NULL,
+			count INTEGER NOT NULL,
+			PRIMARY KEY (player,type)
+		)";
+		$this->database->exec($sql);
+	}
+	public function getTops($limit,$players,$scores) {
+		$sql = "SELECT * FROM Scores";
+		$sql .= " WHERE type = ".self::prepare($scores);
+		if ($players != null) {
+			$sql .= " AND player IN (";
+			$q = "";
+			foreach ($players as $p) {
+				$sql .= $q.self::prepare($p);
+				$q = ",";
+			}
+			$sql .=")";
+		}
+		$sql .= " ORDER BY count DESC";
+		if ($limit) $sql .= " LIMIT ".intval($limit);
+		//echo $sql."\n";
+		$res = $this->database->query($sql);
+		if ($res === false) return null;
+		$tab = [];
+		while (($row = $res->fetchArray(SQLITE3_ASSOC)) != false) {
+			$tab[] = $row;
+		}
+		return $tab;
+	}
+
+	public function getScores($player) {
+		$sql = "SELECT * FROM Scores WHERE player = ".self::prepare($player);
+		$res = $this->database->query($sql);
+		if ($res === false) return null;
+		$tab = [];
+		while (($row = $res->fetchArray(SQLITE3_ASSOC)) != false) {
+			$tab[] = $row;
+		}
+		return $tab;
+	}
+	public function getScore($player,$type) {
+		$sql = "SELECT * FROM Scores WHERE player = ".self::prepare($player).
+			  " AND type = ".self::prepare($type);
+		$res = $this->database->query($sql);
+		return $res->fetchArray(SQLITE3_ASSOC);
+	}
+	public function insertScore($player,$type,$cnt) {
+		$sql = "INSERT INTO Scores (player,type,count) VALUES (".
+			  self::prepare($player).", ".self::prepare($type).", ".intval($cnt).
+			  ")";
+		return $this->database->exec($sql);
+	}
+
+	public function updateScore($player,$type,$cnt) {
+		$sql ="UPDATE Scores SET count=".intval($cnt).
+			  " WHERE (player = ".self::prepare($player)." AND type = ".
+			  self::prepare($type).")";
+		return $this->database->exec($sql);
+	}
+
+	public function delScore($player,$type = null) {
+		$sql ="DELETE FROM Scores WHERE player=".self::prepare($player);
+		if ($type !== null) {
+			$sql .= " AND type = ".self::prepare($type);
+		}
+		return $this->database->exec($sql);
+	}
+}
+<?php
+namespace aliuly\killrate;
+use pocketmine\plugin\PluginBase;
+
+interface DatabaseManager {
+	public function __construct(PluginBase $owner,$cfg);
+	public function getTops($limit,$players,$scores);
+	public function getScores($player);
+	public function getScore($player,$type);
+	public function insertScore($player,$type,$cnt);
+	public function updateScore($player,$type,$cnt);
+	public function delScore($player,$type = null);
+	public function close();
+}
+<?php
+//= api-features
+//: - Multiple money support
+
+namespace aliuly\killrate\common;
+use pocketmine\Server;
+use pocketmine\plugin\PluginBase;
+use pocketmine\utils\TextFormat;
+use pocketmine\IPlayer;
+use LogLevel;
+
+
+/**
+ * This class allows you to use a number of miscellaneous Economy
+ * plugins.
+ */
+abstract class MoneyAPI {
+	/**
+	 * Show a warning when the money API is missing
+	 *
+	 * @param PluginBase $plugin - current plugin
+	 * @param LogLevel $level - optional log level
+	 */
+	static public function noMoney(PluginBase $plugin,$level = LogLevel::WARNING) {
+		if (class_exists(__NAMESPACE__."\\mc",false)) {
+			$plugin->getLogger()->error($level,TextFormat::RED.
+											  mc::_("! MISSING MONEY API PLUGIN"));
+			$plugin->getLogger()->error(TextFormat::BLUE.
+											  mc::_(". Please install one of the following:"));
+			$plugin->getLogger()->error(TextFormat::WHITE.
+											  mc::_("* GoldStd"));
+			$plugin->getLogger()->error(TextFormat::WHITE.
+											  mc::_("* PocketMoney"));
+			$plugin->getLogger()->error(TextFormat::WHITE.
+											  mc::_("* EconomyAPI or"));
+			$plugin->getLogger()->error(TextFormat::WHITE.
+											  mc::_("* MassiveEconomy"));
+		} else {
+			$plugin->getLogger()->error($level,TextFormat::RED.
+											  "! MISSING MONEY API PLUGIN");
+			$plugin->getLogger()->error(TextFormat::BLUE.
+											  ". Please install one of the following:");
+			$plugin->getLogger()->error(TextFormat::WHITE.
+											  "* GoldStd");
+			$plugin->getLogger()->error(TextFormat::WHITE.
+											  "* PocketMoney");
+			$plugin->getLogger()->error(TextFormat::WHITE.
+											  "* EconomyAPI or");
+			$plugin->getLogger()->error(TextFormat::WHITE.
+											  "* MassiveEconomy");
+		}
+	}
+	/**
+	 * Show a notice when the money API is found
+	 *
+	 * @param PluginBase $plugin - current plugin
+	 * @param PluginBase $api - found plugin
+	 * @param LogLevel $level - optional log level
+	 */
+	static public function foundMoney(PluginBase $plugin,$api,$level = LogLevel::INFO) {
+		if (class_exists(__NAMESPACE__."\\mc",false)) {
+			$plugin->getLogger()->log($level,TextFormat::BLUE.
+											  mc::_("Using money API from %1%",
+													  $api->getFullName()));
+		} else {
+			$plugin->getLogger()->log($level,TextFormat::BLUE.
+											  "Using money API from ".$api->getFullName());
+		}
+	}
+	/**
+	 * Find a supported *money* plugin
+	 *
+	 * @param var obj - Server or Plugin object
+	 * @return null|Plugin
+	 */
+	static public function moneyPlugin($obj) {
+		if ($obj instanceof Server) {
+			$server = $obj;
+		} else {
+			$server = $obj->getServer();
+		}
+		$pm = $server->getPluginManager();
+		if(!($money = $pm->getPlugin("PocketMoney"))
+			&& !($money = $pm->getPlugin("GoldStd"))
+			&& !($money = $pm->getPlugin("EconomyAPI"))
+			&& !($money = $pm->getPlugin("MassiveEconomy"))){
+			return null;
+		}
+		return $money;
+	}
+	/**
+	 * Gives money to a player.
+	 *
+	 * @param Plugin api Economy plugin (from moneyPlugin)
+	 * @param str|IPlayer p Player to pay
+	 * @param int money Amount of money to play (can be negative)
+	 *
+	 * @return bool
+	 */
+	static public function grantMoney($api,$p,$money) {
+		if(!$api) return false;
+		switch($api->getName()){
+			case "GoldStd": // takes IPlayer|str
+				$api->grantMoney($p, $money);
+				break;
+			case "PocketMoney": // takes str
+			  if ($p instanceof IPlayer) $p = $p->getName();
+				$api->grantMoney($p, $money);
+				break;
+			case "EconomyAPI": // Takes str
+				if ($p instanceof IPlayer) $p = $p->getName();
+				$api->setMoney($p,$api->mymoney($p)+$money);
+				break;
+			case "MassiveEconomy": // Takes str
+				if ($p instanceof IPlayer) $p = $p->getName();
+				$api->payPlayer($p->getName(),$money);
+				break;
+			default:
+				return false;
+		}
+		return true;
+	}
+	/**
+	 * Gets player balance
+	 *
+	 * @param Plugin $api Economy plugin (from moneyPlugin)
+	 * @param str|IPlayer $player Player to lookup
+	 *
+	 * @return int
+	 */
+	static public function getMoney($api,$player) {
+		if(!$api) return false;
+		switch($api->getName()){
+			case "GoldStd":
+				return $api->getMoney($player);
+				break;
+			case "PocketMoney":
+			case "MassiveEconomy":
+				if ($player instanceof IPlayer) $player = $player->getName();
+				return $api->getMoney($player);
+			case "EconomyAPI":
+				if ($player instanceof IPlayer) $player = $player->getName();
+				return $api->mymoney($player);
+			default:
+				return false;
+				break;
+		}
+	}
+}
+<?php
+namespace aliuly\killrate;
+
+use aliuly\killrate\Main as KillRatePlugin;
+
+use aliuly\killrate\common\PluginCallbackTask;
+use aliuly\killrate\common\MPMU;
+use aliuly\killrate\common\mc;
+use aliuly\killrate\common\SignUtils;
+use aliuly\killrate\common\MoneyAPI;
+
+use pocketmine\event\block\SignChangeEvent;
+use pocketmine\event\player\PlayerInteractEvent;
+use pocketmine\block\Block;
+use pocketmine\tile\Sign;
+use pocketmine\event\Listener;
+
+
+use pocketmine\network\protocol\BlockEntityDataPacket;
+use pocketmine\nbt\NBT;
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\StringTag;
+
+class SignMgr implements Listener {
+  protected $owner;
+  protected $signtxt;
+  protected $formats;
+
+  public function __construct(KillRatePlugin $owner,$cfg) {
+    $this->owner = $owner;
+
+    $this->signtxt = $cfg["signs"];
+    $this->formats = $cfg["formats"];
+
+    $this->owner->getServer()->getPluginManager()->registerEvents($this, $this->owner);
+    if ($cfg["settings"]["dynamic-updates"] && $cfg["settings"]["dynamic-updates"] > 0) {
+      $this->owner->getServer()->getScheduler()->scheduleRepeatingTask(
+        new PluginCallbackTask($this->owner,[$this,"updateTimer"],[]),$cfg["settings"]["dynamic-updates"]
+      );
+    }
+  }
+
+	//////////////////////////////////////////////////////////////////////
+	//
+	// Sign related functionality
+	//
+	//////////////////////////////////////////////////////////////////////
+	public function playerTouchSign(PlayerInteractEvent $ev){
+		if($ev->getBlock()->getId() != Block::SIGN_POST &&
+			$ev->getBlock()->getId() != Block::WALL_SIGN) return;
+		$tile = $ev->getPlayer()->getLevel()->getTile($ev->getBlock());
+		if(!($tile instanceof Sign)) return;
+		$sign = $tile->getText();
+		if (!isset($this->signtxt[$sign[0]])) return;
+		$pl = $ev->getPlayer();
+		if (!MPMU::access($pl,"killrate.signs.use")) return;
+		$this->activateSign($pl,$tile);
+	}
+	public function placeSign(SignChangeEvent $ev){
+		if($ev->getBlock()->getId() != Block::SIGN_POST &&
+			$ev->getBlock()->getId() != Block::WALL_SIGN) return;
+		$tile = $ev->getPlayer()->getLevel()->getTile($ev->getBlock());
+		if(!($tile instanceof Sign)) return;
+		$sign = $ev->getLines();
+		if (!isset($this->signtxt[$sign[0]])) return;
+		$pl = $ev->getPlayer();
+		if (!MPMU::access($pl,"killrate.signs.place")) {
+			SignUtils::breakSignLater($this->owner,$tile);
+			return;
+		}
+		$pl->sendMessage(mc::_("Placed [KillRate] sign"));
+		$this->owner->getServer()->getScheduler()->scheduleDelayedTask(
+      new PluginCallbackTask($this->owner,[$this,"updateTimer"],[]),
+      10
+    );
+	}
+	public function updateTimer() {
+
+		foreach ($this->owner->getServer()->getLevels() as $lv) {
+			if (count($lv->getPlayers()) == 0) continue;
+			foreach ($lv->getTiles() as $tile) {
+				if (!($tile instanceof Sign)) continue;
+				$sign = $tile->getText();
+				if (!isset($this->signtxt[$sign[0]])) continue;
+				foreach ($lv->getPlayers() as $pl) {
+					$this->activateSign($pl,$tile);
+				}
+			}
+		}
+	}
+	private function updateSign($pl,$tile,$text) {
+		$pk = new BlockEntityDataPacket();
+		$data = $tile->getSpawnCompound();
+		$data->Text1 = new StringTag("Text1",$text[0]);
+		$data->Text2 = new StringTag("Text2",$text[1]);
+		$data->Text3 = new StringTag("Text3",$text[2]);
+		$data->Text4 = new StringTag("Text4",$text[3]);
+		$nbt = new NBT(NBT::LITTLE_ENDIAN);
+		$nbt->setData($data);
+
+		$pk->x = $tile->getX();
+		$pk->y = $tile->getY();
+		$pk->z = $tile->getZ();
+		$pk->namedtag = $nbt->write();
+		$pl->dataPacket($pk);
+	}
+	public function activateSign($pl,$tile) {
+		$sign = $tile->getText();
+		$mode = $this->signtxt[$sign[0]];
+		switch ($mode) {
+			case "stats":
+				$name = $pl->getName();
+				$text = ["","","",""];
+				$text[0] = mc::_("Stats: %1%",$name);
+
+				$l = 1;
+				foreach (["Player"=>mc::_("Kills: "),
+							 "points"=>mc::_("Points: ")] as $i=>$j) {
+					$score = $this->owner->getScoreV2($name,$i);
+					if ($score && isset($score["count"])) {
+						$score = $score["count"];
+					} else {
+						$score = "N/A";
+					}
+					$text[$l++] = $j.$score;
+				}
+        if ($this->owner->getMoneyPlugin() !== null) {
+				  $text[$l++] = mc::_("Money: ").
+					     MoneyAPI::getMoney($this->owner->getMoneyPlugin(),$name);
+        }
+				break;
+			case "online-tops":
+				$text = $this->topSign(true,"default",mc::_("Top Online"),$sign);
+				break;
+			case "rankings":
+				$text = $this->topSign(false,"default",mc::_("Top Players"),$sign);
+				break;
+			case "rankings-names":
+				$text = $this->topSign(false,"names",mc::_("Top Names"),$sign);
+				break;
+			case "rankings-points":
+				$text = $this->topSign(false,"scores",mc::_("Top Scores"),$sign);
+				break;
+			case "online-top-names":
+				$text = $this->topSign(true,"names",mc::_("On-line Names"),$sign);
+				break;
+			case "online-top-points":
+				$text = $this->topSign(true,"scores",mc::_("On-line Scores"),$sign);
+				break;
+			default:
+				return;
+
+		}
+		$this->updateSign($pl,$tile,$text);
+	}
+
+	protected function topSign($mode,$fmt,$title,$sign) {
+		$col = "points";
+		if ($sign[1] != "") $title = $sign[1];
+		if ($sign[2] != "") $col = $sign[2];
+		if ($sign[3] != "" && isset($this->formats[$sign[3]])) {
+			$fmt = $this->formats[$sign[3]];
+		} else {
+			$fmt = $this->formats[$fmt];
+		}
+		$text = ["","","",""];
+		if ($title == "^^^") {
+			$cnt = 4;
+			$start = 0;
+		} else {
+			$text[0] = $title;
+			$cnt = 3;
+			$start = 1;
+		}
+		$res = $this->owner->getRankings($cnt,$mode,$col);
+		if ($res == null) {
+			$text[2] = mc::_("NO STATS FOUND!");
+		} else {
+			$i = 1; $j = $start;
+			foreach ($res as $r) {
+				$tr = [
+					"{player}" => $r["player"],
+					"{count}" => $r["count"],
+					"{sname}" => substr($r["player"],0,8),
+					"{n}" => $i++,
+				];
+				$text[$j++] = strtr($fmt,$tr);
+			}
+		}
+		return $text;
+	}
+}
+<?php
+namespace aliuly\killrate\common;
+
+use pocketmine\scheduler\PluginTask;
+use pocketmine\plugin\Plugin;
+
+/**
+ * Simple plugin callbacks.
+ *
+ * Allows the creation of simple callbacks with extra data
+ * The last parameter in the callback will be the "currentTicks"
+ *
+ * Simply put, just do:
+ *
+ *    new PluginCallbackTask($plugin,[$obj,"method"],[$args])
+ *
+ * Pass it to the scheduler and off you go...
+ */
+class PluginCallbackTask extends PluginTask{
+
+	/** @var callable */
+	protected $callable;
+
+	/** @var array */
+	protected $args;
+
+	/**
+	 * @param Plugin   $owner
+	 * @param callable $callable
+	 * @param array    $args
+	 */
+	public function __construct(Plugin $owner, callable $callable, array $args = []){
+		parent::__construct($owner);
+		$this->callable = $callable;
+		$this->args = $args;
+		$this->args[] = $this;
+	}
+	/**
+	 * @return callable
+	 */
+	public function getCallable(){
+		return $this->callable;
+	}
+
+	public function onRun($currentTicks){
+		$c = $this->callable;
+		$args = $this->args;
+		$args[] = $currentTicks;
+		$c(...$args);
+	}
+
+}
+<?php
+namespace aliuly\killrate;
+
+use aliuly\killrate\Main as KillRatePlugin;
+
+use pocketmine\Achievement;
+use pocketmine\Player;
+
+class AchievementsGiver {
+  protected $owner;
+  protected $enabled;
+  public function __construct(KillRatePlugin $owner,$mode) {
+    $this->owner = $owner;
+    $this->enabled = $mode;
+    if ($this->enabled) {
+      Achievement::add("killer","First Blood!",[]);
+      Achievement::add("serialKiller","Killer Streak!",["killer"]);
+      Achievement::add("ranked1","Ranked #1!",["killer"]);
+      Achievement::add("kill10","Achieved 10 Kills!",["killer"]);
+      Achievement::add("kill100","Achieved 100 Kills!",["kill10"]);
+      Achievement::add("kill1000","Achieved 1,000 Kills!",["kill100"]);
+    }
+  }
+  public function awardSerialKiller(Player $player) {
+    if (!$this->enabled) return;
+    $player->awardAchievement("serialKiller");
+  }
+
+  public function awardKills(Player $player, $vic, $kills) {
+    if (!$this->enabled || !$kills) return;
+
+    $player->awardAchievement("killer");
+    if ($vic == "Player") {
+      if ($kills >= 10) $player->awardAchievement("kill10");
+      if ($kills >= 100) $player->awardAchievement("kill100");
+      if ($kills >= 1000) $player->awardAchievement("kill1000");
+    }
+
+    $res = $this->owner->getRankings(1);
+    if ($res !== null && $res[0]["player"] == strtolower($player->getName())) {
+      // Achieved #1 ranking!
+      $player->awardAchievement("ranked1");
+    }
+  }
+
+}
+<?php
+namespace aliuly\killrate;
+
+use aliuly\killrate\Main as KillRatePlugin;
+use pocketmine\utils\TextFormat;
+use pocketmine\Player;
+use aliuly\killrate\common\mc;
+
+class RankMgr {
+  protected $owner;
+  protected $rankup;
+  protected $defaultRank;
+  public function __construct(KillRatePlugin $owner,$mode,$settings) {
+    $this->owner = $owner;
+    $this->rankup = null;
+    if ($mode) {
+			$this->rankup = $this->owner->getServer()->getPluginManager()->getPlugin("RankUp");
+			if ($this->rankup === null) {
+				$this->owner->getLogger()->error(TextFormat::RED.mc::_("RankUp plugin not found"));
+				$this->owner->getLogger()->error(TextFormat::YELLOW.mc::_("ranks feature disabled"));
+      } else {
+        $this->defaultRank = $settings["default-rank"];
+        if ($this->defaultRank) {
+          $rank = $this->rankup->getRankStore()->getRankByName($this->defaultRank);
+          if ($rank === false) {
+            $this->owner->getLogger()->error(TextFormat::RED.mc::_("Default rank %1% not found", $this->defaultRank));
+            $this->defaultRank = null;
+          }
+        } else {
+          $this->defaultRank = null;
+        }
+      }
+    }
+  }
+  public function resetRank(Player $player) {
+    if ($this->rankup === null || $this->defaultRank === null) return;
+    $rank = $this->rankup->getRankStore()->getRankByName($this->defaultRank);
+    if (!$this->rankup->getPermManager()->addToGroup($player, $rank->getName())) {
+      $this->owner->getLogger()->warning(mc::_("Unable to reset rank for %1%", $player));
+    }
+  }
+  public function promote(Player $player, $newscore) {
+    if ($this->rankup === null) return;
+  	// OK, do we need to rank up?
+		$nextrank = $this->rankup->getRankStore()->getNextRank($player);
+    if ($nextrank === false) return;
+		if ($newscore < $nextrank->getPrice()) return;
+		// Yeah!  Levelling up!
+		if ($this->rankup->getPermManager()->addToGroup($player,$nextrank->getName())) {
+	    $this->owner->getServer()->broadcastMessage(TextFormat::BLUE.mc::_("%1% is now %2%!",$player->getDisplayName(),$nextrank->getName()));
+		} else {
+			$player->sendMessage(TextFormat::RED.mc::_("Unable to award level %1%", $nextrank->getName()));
+		}
+  }
+}
+<?php
+namespace aliuly\killrate;
+
+use aliuly\killrate\Main as KillRatePlugin;
+use pocketmine\utils\TextFormat;
+use pocketmine\Player;
+use aliuly\killrate\common\mc;
+
+use aliuly\killrate\api\KillRateNewStreakEvent;
+use aliuly\killrate\api\KillRateEndStreakEvent;
+use aliuly\killrate\api\KillRateBonusScoreEvent;
+use aliuly\killrate\common\MoneyAPI;
+
+class KillStreak {
+  protected $owner;
+  protected $enabled;
+  protected $money;
+  protected $minkills;
+
+  public function __construct(KillRatePlugin $owner,$mode,$settings,$money) {
+    $this->owner = $owner;
+    $this->enabled = $mode;
+    $this->minkills = $settings["min-kills"];
+    $this->money = $money;
+  }
+
+  public function endStreak(Player $player) {
+    if (!$this->enabled) return;
+    $n = strtolower($player->getName());
+    $newstreak = $this->owner->getScoreV2($n,"streak");
+    if ($newstreak == 0 || $newstreak < $this->minkills) return;
+    $this->owner->getServer()->getPluginManager()->callEvent(
+        $ev = new KillRateEndStreakEvent($this->owner,$player,$newstreak)
+    );
+    if ($ev->isCancelled()) return;
+    $oldstreak = $this->owner->getScoreV2($n,"best-streak");
+    if ($oldstreak == 0) {
+      $this->owner->setScore($n,$newstreak,"best-streak");
+      $this->owner->getServer()->broadcastMessage(mc::_("%1% ended his first kill-streak at %2% kills", $player->getDisplayName(), $newstreak));
+    } elseif ($newstreak > $oldstreak) {
+      $this->owner->setScore($n,$newstreak,"best-streak");
+      $this->owner->getServer()->broadcastMessage(mc::_("%1% beat previous streak record of %2% at %3% kills", $player->getDisplayName(), $oldstreak, $newstreak));
+    }
+    $this->owner->delScore($n,"streak");
+  }
+  public function scoreStreak(Player $player) {
+    if (!$this->enabled) return false;
+    $n = strtolower($player->getName());
+    $streak = $this->owner->updateDb($n,"streak");
+    if ($streak < $this->minkills) return false;
+
+    $this->owner->getServer()->getPluginManager()->callEvent(
+          new KillRateNewStreakEvent($this->owner,$player,$streak)
+    );
+    $this->owner->getServer()->broadcastMessage(TextFormat::YELLOW.mc::_("%1% has a %2%-kill streak",$player->getDisplayName(),$streak));
+    if ($this->money === null) return true;
+
+    list($points,$money) = $this->owner->getPrizes("streak");
+    $this->owner->getServer()->getPluginManager()->callEvent(
+            $ev = new KillRateBonusScoreEvent($this->owner,$player,$money)
+    );
+    if ($ev->isCancelled()) return true;
+    $player->sendMessage(TextFormat::GREEN.
+                    mc::_("You earn an additional $%1% for being in kill-streak!",$ev->getMoney()));
+    MoneyAPI::grantMoney($this->money,$player,$ev->getMoney());
+    return true;
+  }
+}

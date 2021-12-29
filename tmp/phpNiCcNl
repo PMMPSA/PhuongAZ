@@ -1,0 +1,9 @@
+name: KillTarget
+main: KillTarget\Main
+version: 6.6.6
+api: [2.0.0]
+load: POSTWORLD
+author: Gesù di Nazareth
+description: Kill the target
+depend:
+ - EconomyAPI

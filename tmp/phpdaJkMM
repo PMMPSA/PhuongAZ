@@ -1,0 +1,12 @@
+name: Fly
+author: THEKANNIBAL
+version: "2.0.0"
+api: [2.0.0]
+description: Volar En Survival Los Jugadores No Resiven Daño!
+main: TodoGames\Fly\Main
+
+commands:
+    fly:
+        description: "Activar o desactivar Fly."
+        usage: "/fly"
+        permission: TGfly.fly

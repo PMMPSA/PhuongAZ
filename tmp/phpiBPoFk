@@ -1,0 +1,61 @@
+name: FFA
+author: zLoostyG0D
+description: Plugin mais compacto de FFA
+version: 1
+main: zLoostyG0D\Main
+api: 2.0.0<?php
+
+namespace zLoostyG0D;
+
+use pocketmine\plugin\PluginBase;  
+use pocketmine\event\Listener;
+use pocketmine\event\player\PlayerJoinEvent;
+use pocketmine\event\player\PlayerRespawnEvent;
+use pocketmine\item\Item;
+use pocketmine\event\player\PlayerDeathEvent;
+use pocketmine\Player;
+
+class Main extends PluginBase implements Listener{
+
+    public function onEnable(){
+       $this->getServer()->getPluginManager()->registerEvents($this, $this);
+        $this->getLogger()->info("§aPlugin FFA ativado!");
+     }
+    
+    public function onJoin(PlayerJoinEvent $e){
+        $player = $e->getPlayer();
+        $name = $player->getName();
+          $player->sendTip("§a§l        FFA 1§r\n§fBem-vindo, ".$name."!\n\n\n");
+          $player->getInventory()->clearAll();
+          $player->getInventory()->addItem(Item::get(272, 0, 1));
+          $player->getInventory()->addItem(Item::get(261, 0, 1));
+          $player->getInventory()->addItem(Item::get(364, 0, 8));
+          $player->getInventory()->addItem(Item::get(322, 0, 3));
+          $player->getInventory()->addItem(Item::get(438, 22, 3));
+          $player->getInventory()->addItem(Item::get(373, 15, 1));
+          $player->getInventory()->addItem(Item::get(262, 0, 16));
+          $player->getInventory()->setHelmet(Item::get(306));
+                $player->getInventory()->setChestplate(Item::get(303));
+                $player->getInventory()->setLeggings(Item::get(304));
+                $player->getInventory()->setBoots(Item::get(309));
+                }
+    public function onRespawn(PlayerRespawnEvent $e){
+           $player = $e->getPlayer();
+         	$player->getInventory()->addItem(Item::get(272, 0, 1));
+          $player->getInventory()->addItem(Item::get(261, 0, 1));
+          $player->getInventory()->addItem(Item::get(364, 0, 8));
+          $player->getInventory()->addItem(Item::get(322, 0, 3));
+          $player->getInventory()->addItem(Item::get(438, 22, 3));
+          $player->getInventory()->addItem(Item::get(373, 15, 1));
+          $player->getInventory()->addItem(Item::get(262, 0, 16));
+          $player->getInventory()->setHelmet(Item::get(306));
+                $player->getInventory()->setChestplate(Item::get(303));
+                $player->getInventory()->setLeggings(Item::get(304));
+                $player->getInventory()->setBoots(Item::get(309));
+                }
+    public function onPlayerDeath(PlayerDeathEvent $e){
+        if($e->getEntity() instanceof Player){
+            $e->setDrops([]);
+        }
+    }
+}

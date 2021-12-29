@@ -1,0 +1,14 @@
+name: LightningStick
+version: 1.0
+main: xbeastmode\lightningstick\Loader
+author: xBeastMode
+description: "Adds a lightning strike with a stick"
+
+permissions:
+  lightningstrike.use:
+    default: op
+    description: "Allows usage of lightning stick command"
+
+api:
+  - 1.13.0
+  - 2.0.0

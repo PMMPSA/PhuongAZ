@@ -1,0 +1,6 @@
+name: ServerPoint
+main: Point\Point
+version: 1.1
+api: [2.0.0]
+load: POSTWORLD
+author: Tradottoby IlKannibale

@@ -1,0 +1,16 @@
+name: Nicknames
+version: 1.0.0
+main: Nicknames\Main
+author: Kairus Dark Seeker
+load: POSTWORLD
+api:
+- 1.13.0
+- 2.0.0
+
+permissions:
+  nick:
+    description: "Nicknames by Kairus Dark Seeker! (Twitter: @KairusDS)"
+    children:
+      nick.use:
+        description: "/nickname"
+        default: op

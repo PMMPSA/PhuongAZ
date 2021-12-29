@@ -1,0 +1,64 @@
+name: ArrowExplode
+main: AE\AE
+version: 1.0.0
+api: [2.0.0]
+load: POSTWORLD
+author: Hamooz001,YOUSEEFXCRAFT
+<?php
+
+namespace AE;
+
+use pocketmine\plugin\PluginBase;
+use pocketmine\event\Listener;
+use pocketmine\utils\TextFormat;
+use pocketmine\event\entity\ProjectileLaunchEvent;
+use pocketmine\event\entity\EntityShootBowEvent;
+use pocketmine\event\entity\EntityDespawnEvent;
+use pocketmine\event\entity\ProjectileHitEvent;
+use pocketmine\entity\Arrow;
+use pocketmine\Player;
+use pocketmine\Server;
+use pocketmine\level\Position;
+use pocketmine\level\Level;
+use pocketmine\level\Explosion;
+
+class AE extends PluginBase implements Listener {
+
+		function onEnable ()
+		{
+				$plugin = "ArrowExplode";
+				$this->getLogger()->info(TextFormat::GREEN.$plugin.'ArrowExplode'.TextFormat::GOLD." By Hamooz001,YOUSEEFXCRAFT");
+				$this->getLogger()->info(TextFormat::RED.$plugin.'Loaded');
+				Server::getInstance()->getPluginManager()->registerEvents($this,$this);
+		}
+
+		function onShoot (EntityShootBowEvent $event)
+		{
+				$shooter = $event->getEntity();
+				if ($shooter instanceof Player) {
+					$id = $shooter->getID();
+					$this->launch[$id] = (bool) true;
+				}
+		}
+		
+		function onHit (ProjectileHitEvent $event)
+		{
+				$entity = $event->getEntity();
+				$level = $entity->getLevel();
+				if ($entity instanceof Arrow) {
+					$shooter = $entity->shootingEntity;
+					$pos = $entity->getPosition();
+					if ($shooter instanceof Player) {
+						$id = $shooter->getID();
+						$shoot = $this->launch[$id];
+						if ($pos instanceof Position and isset($shoot)) {
+							$level->removeEntity($entity);
+							$explosion = new Explosion($pos, 4);
+							$explosion->explode();
+							unset($this->launch[$id]);
+						}
+					}
+				}
+		}
+}
+

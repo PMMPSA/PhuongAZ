@@ -1,0 +1,146 @@
+name: SurvivalFly
+main: SurvivalFly\SurvivalFly
+version: "1.0.9"
+api: [1.9.0]
+load: POSTWORLD
+copyright: Mentha Haplocalyx
+author: Mentha Haplocalyx Alcatraz_Du
+
+<?php
+
+namespace SurvivalFly;
+
+use pocketmine\utils\Config;
+use pocketmine\utils\TextFormat;
+use pocketmine\plugin\PluginBase;
+use pocketmine\event\player\PlayerMoveEvent;
+//use pocketmine\event\player\PlayerJoinEvent;
+use pocketmine\level\particle\MobSpawnParticle;
+use pocketmine\level\sound\BatSound;
+use pocketmine\level\Level;
+use pocketmine\event\entity\EntityDamageEvent;
+use pocketmine\event\player\PlayerItemHeldEvent;
+use pocketmine\network\protocol\SetEntityMotionPacket;
+use pocketmine\network\protocol\UpdateBlockPacket;
+use pocketmine\event\Listener;
+use pocketmine\Player;
+use pocketmine\math\Vector3;
+use pocketmine\nbt\tag\Double;
+use pocketmine\nbt\tag\Enum;
+use pocketmine\Server;
+use pocketmine\item\Item;
+use pocketmine\block\Block;
+
+class SurvivalFly extends PluginBase implements Listener{
+ public $conf;
+ public $hold = [];
+	public function onEnable(){
+		$this->getServer()->getPluginManager()->registerEvents($this, $this);
+		  @mkdir($this->getDataFolder());
+		$this->conf = (new Config($this->getDataFolder()."config.yml", Config::YAML,array("flymode"=>"setmotion","flyitem"=>"288","flyspeed"=>"0.4","runitem"=>"287","runspeed"=>"0.3","freezeitem"=>"341")))->getAll();
+		$this->fm = $this->conf["flymode"];
+		$this->fi = $this->conf["flyitem"];
+		$this->fs = $this->conf["flyspeed"];
+		$this->ri = $this->conf["runitem"];
+		$this->rs = $this->conf["runspeed"];
+		$this->fzi = $this->conf["freezeitem"];
+  $this->getLogger()->info(TextFormat::GREEN."===========================================");
+  $this->getLogger()->info(TextFormat::GREEN."[SurvivalFly] I am enabled.");
+	$this->getLogger()->info(TextFormat::GREEN."Copyright ©2015 [SurvivalFly] Powered By [Mentha Haplocalyx] Version 1.0.9");
+}      
+     /* public function onJoin(PlayerJoinEvent $event){
+      $item = $event->getPlayer()->getInventory()->getItemInHand();
+      $event->getPlayer()->getInventory()->setItemInHand(new Item(0,0,0));
+      $event->getPlayer()->getInventory()->addItem($item);
+      $event->getPlayer()->sendMessage("Copyright ©2015 [SurvivalFly] Powered By \n[Mentha Haplocalyx QQ: 984267166] Version 1.0.7");
+      }*/
+       public function onMove(PlayerMoveEvent $event){
+      switch($event->getPlayer()->getInventory()->getItemInHand()->getID()){
+      case $this->fi:
+      $p = $event->getPlayer();
+			  $m = new Enum("Motion", [
+							new Double("", -\sin($p->yaw / 180 * M_PI) * \cos($p->pitch / 180 * M_PI)),
+							new Double("", -\sin($p->pitch / 180 * M_PI)),
+							new Double("", \cos($p->yaw / 180 * M_PI) * \cos($p->pitch / 180 * M_PI) )
+								]);
+						$v3 =  new Vector3($m[0] * $this->fs, $m[1] * $this->fs, $m[2] * $this->fs);
+						$v =  new Vector3($p->x,$p->y,$p->z);
+						$this->onStunt(new MobSpawnParticle($v),new BatSound($v),$p);
+						if($this->fm == "sendpacket"){
+					 $this->fly($p,$v3);
+					 }else{
+			  $event->getPlayer()->setMotion($v3);
+			  }
+			  return false;
+			  case $this->ri:
+			  $p = $event->getPlayer();
+			  $m = new Enum("Motion", [
+									new Double("", -\sin($p->yaw / 180 * M_PI) * \cos($p->pitch / 180 * M_PI)),0,
+									new Double("", \cos($p->yaw / 180 * M_PI) * \cos($p->pitch / 180 * M_PI) )
+								]);
+			 $v3 =  new Vector3($m[0] * $this->rs, $m[1] * $this->rs, $m[2] * $this->rs);
+					$this->fly($p,$v3);
+					return false;
+				case $this->fzi:
+				$p = $event->getPlayer();
+				if(in_array($p->getName(),$this->hold)){
+				if($p->fallDistance >= 4){
+			$v3 = new Vector3($this->fixPos($p->getX()), ($p->getY() -2), $this->fixPos($p->getZ()));
+				$this->freeze($p,$v3,new Block(95,0,1));
+				}}
+      }unset($p,$v3,$m);
+   }
+	public function fly(Player $player, Vector3 $v3) {
+		$pk = new SetEntityMotionPacket();
+		$pk = [[0, $v3->x, $v3->y, $v3->z]];
+		$player->dataPacket($pk);
+	}
+		public function freeze(Player $player, Vector3 $v3, Block $block) {
+		$pk = new UpdateBlockPacket();
+		$pk->x = $v3->x;
+		$pk->y = $v3->y;
+		$pk->z = $v3->z;
+		$pk->block = $block->getId();
+		$pk->meta = $block->getDamage();
+		$player->dataPacket($pk);
+		unset($pk,$player,$v3,$block);
+	}
+	    function fixPos($a){
+	if($a<0)
+	{
+		return $a-1;
+	}
+	return $a;
+}
+	public function onItemHold(PlayerItemHeldEvent $event){
+		if($event->getItem()->getID() == $this->fzi){
+	$this->hold[] = $event->getPlayer()->getName();
+	$event->getPlayer()->sendMessage("[SurvivalFly] I am stopping");
+	}
+		if($event->getItem()->getID() == $this->ri){
+	$this->hold[] = $event->getPlayer()->getName();
+	$event->getPlayer()->sendMessage("[SurvivalFly] Toward the front.");
+	}
+	if($event->getItem()->getID() == $this->fi){
+	$this->hold[] = $event->getPlayer()->getName();
+	$event->getPlayer()->sendMessage("[SurvivalFly] Toward the sky.");
+	}else
+	if(in_array($event->getPlayer()->getName(),$this->hold) and (!$event->getItem()->getID() == $this->fzi)){
+	$founded = array_search($event->getPlayer()->getName(), $this->hold);
+			array_splice($this->hold, $founded, 1);
+ }unset($found);
+	}
+	public function onFall(EntityDamageEvent $event){
+	if($event->getEntity() instanceof Player){
+	if($event->getCause() == 4){
+	if($event->getEntity()->getInventory()->getItemInhand()->getID() == $this->fi or $event->getEntity()->getInventory()->getItemInHand()->getID() == $this->fzi){
+	$event->setCancelled();
+	}}}}
+	public function onStunt($pstunt,$sstunt,$p){
+ $pstunt->cross(new Vector3($p->x,$p->y,$p->z));
+ $p->getLevel()->addParticle($pstunt);
+ $p->getLevel()->addSound($sstunt);
+unset($p);
+}
+}
+

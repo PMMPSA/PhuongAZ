@@ -1,0 +1,94 @@
+name: KillTarget
+main: KillTarget\Main
+version: 6.6.6
+api: [2.0.0]
+load: POSTWORLD
+author: Gesù di Nazareth
+description: Kill the target
+depend:
+ - EconomyAPI
+<?php
+
+namespace KillTarget;
+
+use pocketmine\Server;
+use pocketmine\Player;
+use pocketmine\Plugin\PluginBase;
+use pocketmine\event\Listener;
+
+use pocketmine\event\Player\PlayerDeathEvent;
+use pocketmine\event\entity\EntityDamageByEntityEvent;
+use pocketmine\event\player\PlayerMoveEvent;
+
+use pocketmine\utils\Config;
+use pocketmine\utils\TextFormat;
+use PocketMoney\PocketMoney;
+use pocketmine\math\Vector3;
+
+use pocketmine\level\Level;
+use pocketmine\level\Position;
+use pocketmine\level\Position\getLevel;
+use pocketmine\level\particle\Particle;
+use pocketmine\level\particle\CriticalParticle;
+
+
+
+class Main extends PluginBase implements Listener{
+
+public function onLoad(){
+}
+
+public function onEnable(){
+            $this->getServer()->getPluginManager()->registerEvents($this, $this);
+            $this->getLogger()->info("§aplugin§eon");
+            $this->getLogger()->info("IlKannibaleShow(traslate byIlKannibale)");
+
+	if (!file_exists($this->getDataFolder())) @mkdir($this->getDataFolder(), 0744, true);
+	      $this->config = new Config($this->getDataFolder() . "config.yml", Config::YAML, 
+array(
+"target"=>"shoki",
+"money"=>"5000",
+));
+}
+
+     public function onPlayerDeath(PlayerDeathEvent $event){
+
+            $Player = $this->config->get("target");
+            $amt = $this->config->get("money");
+            $name = $event->getEntity()->getName();
+            $ev = $event->getEntity()->getLastDamageCause();
+
+            if ($ev instanceof EntityDamageByEntityEvent){
+                $killer = $ev->getDamager();
+
+                if ($killer instanceof Player){
+
+                    if ($name == $Player){
+                        $this->getServer()->getPluginManager()->getPlugin('EconomyAPI')->reduceMoney($killer->getName(), $amt);
+                        $killer->sendTip("§e 【target ： ".$Player."】 §fil§ckill§6$".$PM."§fwghuaghuaghuaghuaghuaghuaghu！");
+                    }
+                }
+            }
+     }
+
+     public function onPlayerMove(PlayerMoveEvent $ev){
+            $Player = $this->config->get("target");
+            $player = $ev->getPlayer();
+            $tname = $player->getName();
+            if($tname == $Player){
+               $level = $player->getLevel();
+               $pos = new Vector3($player->getX(),$player->getY()+1,$player->getZ());
+               $pt = new CriticalParticle($pos);
+                     $count = 20;
+                     for($i = 0;$i < $count; ++$i){
+                     $level->addParticle($pt);
+
+                     }
+            }
+     }
+
+     public function onDisable(){
+             $this->getLogger()->info("§9KillTarget kill a target...");
+
+     }
+}

@@ -1,0 +1,124 @@
+GenisysPro Crash Dump Tue Jan 2 16:48:07 UTC 2018
+
+Error: 'continue' not in the 'loop' or 'switch' context
+File: /itemcase.phar/src/aliuly/itemcasepe/Main
+Line: 184
+Type: E_COMPILE_ERROR
+
+THIS CRASH WAS CAUSED BY A PLUGIN
+
+Code:
+[175] 	public function spawnPlayerCases(Player $pl,Level $level){
+[176] 		if (!isset($this->cases[$level->getName()])) return;
+[177] 		foreach (array_keys($this->cases[$level->getName()]) as $cid) {
+[178] 			$this->sndItemCase($level,$cid,[$pl]);
+[179] 		}
+[180] 	}
+[181] 	public function spawnLevelItemCases(Level $level){
+[182] 		if (!isset($this->cases[$level->getName()])) return;
+[183] 		$ps = $level->getPlayers();
+[184] 		if (!count($ps)) continue;
+[185] 		foreach (array_keys($this->cases[$level->getName()]) as $cid) {
+[186] 			$this->sndItemCase($level,$cid,$ps);
+[187] 		}
+[188] 	}
+[189] 
+[190] 	public function despawnPlayerCases(Player $pl,Level $level){
+[191] 		$world = $level->getName();
+[192] 		if (!isset($this->cases[$world])) return;
+[193] 		foreach (array_keys($this->cases[$world]) as $cid) {
+[194] 			$this->rmItemCase($level,$cid,[$pl]);
+
+Backtrace:
+#0 (): pocketmine\Server->crashDump(boolean)
+
+GenisysPro version: 3a9cc40f42d9b6fa06f42a92bc9fbdd7be3bddf1 [Protocol 113; API 3.0.1]
+uname -a: Linux localhost 3.10.65-7541827 #2 SMP PREEMPT Fri Sep 15 19:52:51 KST 2017 armv7l
+PHP version: 7.0.3
+Zend version: 3.0.0
+OS : Linux, android
+
+Server uptime: 15 seconds
+Number of loaded worlds: 0
+Players online: 0/20
+
+Loaded plugins:
+1vs1 0.0.5 by  for API(s) 2.0.0, 1.1.0
+SClearLagg Beta_0.2 by Sergey_Dertan for API(s) 1.8.0
+adaisinlan 1.0.0 by FleetHD for API(s) 1.12.0, 2.0.0
+AdminPainel 1 by Yodaylay22HD for API(s) 2.0.0, 1.13.0, 1.12.0
+aDropHead 1.0.0.1 by birdkkk for API(s) 2.0.0, 2.1.0, 3.0.0, 3.0.0-ALPHA1, 3.0.0-ALPHA2
+AdvancedKits 5.0b1 by luca28pet for API(s) 2.0.0
+AdvancedMOTD 1.0.1 by Philip Shilling for API(s) 1.12.0
+Alias 1.2.0 by ZacHack for API(s) 1.12.0
+AlwaysSpawn 2.2.2 by Philip Shilling for API(s) 2.0.0
+AntiCheat 1.3.1 by DarkWav (Darku) for API(s) 2.0.0, 1.14.0, 1.13.2
+AntiHacks 1.0.0 by JackNoordhuis for API(s) 1.0.0, 2.0.0
+AntiSpam 1.3 by xBeastMode for API(s) 2.0.0
+AntiTower 1 by xpyctum for API(s) 1.0.0
+ArrowExplode 1.0.0 by Hamooz001,YOUSEEFXCRAFT for API(s) 2.0.0
+ArrowTP 1.1 by xBeastMode for API(s) 1.13.0
+ASR 2.0.2 by iJoshuaHD for API(s) 2.0.0
+aTopPlayers 1 by AlexBrin for API(s) 2.0.0
+AUTOARMOR 2.2.1 by HOST for API(s) 1.13.0
+AutoInv 1.0.0 by JackNoordhuis for API(s) 1.0.0, 2.0.0, 3.0.0
+autowalk 6.6.6 by tradottoby IlKannibale for API(s) 1.11.0
+BangGia 0.5 by ThinkerS for API(s) 2.0.0, 2.1.0, 3.0.0, 3.0.0-ALPHA1, 3.0.0-ALPHA2, 3.0.0-ALPHA3
+BanItem 2.2 by LDX for API(s) 1.0.0, 2.0.0
+BasicHUD 1.0.6 by aliuly for API(s) 2.0.0
+Bedwars 6.6.6 by Bluplayz for API(s) 1.14.0
+BetterGapples 1 by ZGoldenPickle for API(s) 1.13.0
+blockMCPE14 1 by https://vk.com/ifreeze_dev for API(s) 2.0.0
+BlockEffects 1.0.5 by GmWM for API(s) 1.12.0
+BloodFX 1.1.0 by hoyinm14mc & CyberCube-HK Team for API(s) 1.12.0
+Broadcaster 1.16 by EvolSoft for API(s) 2.0.0
+BuildUHCJericMD 2.2.1 by JMD for API(s) 1.0.0, 1.1.0, 2.0.0
+BuyCraft 1.2.2 by Falkirks for API(s) 1.0.0
+BuyXP 1.0.0 by LordHippo for API(s) 1.0.0, 2.0.0, 3.0.0, 3.0.0-ALPHA5
+ChatCute 1 by ฟรองซ์เอง for API(s) 3.0.0-ALPHA2, 2.1.0
+ChatDefender 1.1.1 by Falkirks for API(s) 1.6.0
+ChatLogin 1 by BulutMCPE,FleetHD for API(s) 1.14.0
+CheckID 1.0-Alpha by XxD7omGamer for API(s) 2.0.0
+ClearChat 1.0.0 by LostTeam for API(s) 1.13.1, 2.0.0
+ClearInv 1.0 by Semyon_Semyonov for API(s) 1.2.0
+ClearLagg 1.1.0 by LegendOfMCPE for API(s) 1.0.0
+CoolDeath 0.0.1 by  for API(s) 1.0.0, 2.0.0
+CosmeticMenu 1.0.0 by BoxOfDevs, LittleBigMC, TheKnightGamer, Ad5001 for API(s) 2.0.0, 1.14.0
+CratesCMD 1.1 by TaoKhongThichDeAuthor for API(s) 3.0.0-ALPHA7
+CustomAlerts 1.6 by EvolSoft for API(s) 1.12.0
+DailyReward 1.3 by MrDoni98 for API(s) 3.0.0, 3.0.0-ALPHA6
+DamageIndicator 1.0.0 by LittleBigMC for API(s) 1.0.0
+DevTools 1.10.0 by PocketMine Team for API(s) 1.3.1
+Disguise 1.1 [by Enes5519] by Enes5519 for API(s) 1.14.1, 2.0.0
+EAC 1.1 by DarkWav (Darku) for API(s) 3.0.0, 2.1.0", 2.0.0, 1.14.0, 1.13.2, 1.0.0
+EasierTime 1.2 by Ad5001 for API(s) 2.0.0
+EconomyAPI 2.0.9 by onebone for API(s) 2.0.0
+EconomyLand 2.0.9 by onebone for API(s) 1.12.0
+EconomySell 2.0.7 by onebone for API(s) 1.12.0
+EconomyShop 2.0.7 by onebone for API(s) 1.12.0
+EconomyCShop 0.5.4 by FAMIMA for API(s) 1.0.0, 2.0.0
+EconomyJob 2.0.4 by onebone for API(s) 2.0.0, 2.1.0, 3.0.0, 3.0.0-ALPHA6
+EconomyPotionDispenser 0.0.2 by Khinenw for API(s) 1.12.0
+EconomyPShop 2.0.2 by onebone for API(s) 1.12.0
+AdvertisingKick 1.0.0 by  for API(s) 2.0.0
+EnderPearl 1.2.3 by Yosshi999 for API(s) 1.0.0, 1.1.0
+EntityManager 2.7 by milk0417 for API(s) 2.0.0, 1.14.0
+FactionsPro 1.6.3 by Tethered_ for API(s) 1.12.0
+EssentialsPE 2.0.0 by LegendsOfMCPE Team for API(s) 2.1.0, 2.0.0
+essentialsTP 1.1.0 by  for API(s) 1.12.0
+Farms 1.0-non-alpha by hm for API(s) 1.4.1
+FFA 1 by zLoostyG0D for API(s) 2.0.0
+FireworkEvents 0.2 by hoyinm for API(s) 1.12.0
+Fly 2.0.0 by THEKANNIBAL for API(s) 2.0.0
+InventoryClear 1.3 by CrazedMiner for API(s) 1.11.0
+GlobalBan 1.0 by LazzKiller for API(s) 2.0.0, 1.13.0, 1.12.0
+HealthBar 1.0.1 by LegendOfMCPE for API(s) 2.0.0, 3.0.1, 3.0.0-ALPHA1, 3.0.0-ALPHA2, 3.0.0-ALPHA3, 3.0.0-ALPHA4, 3.0.0-ALPHA5, 3.0.0-ALPHA6
+HealthStats 1.1.1 by Striker209_MPE for API(s) 1.3.1
+HereAuth 1.0-Beta#227 by PEMapModder for API(s) 2.0.0
+HungerGamesDoDo 3.0.0 by KaitoDoDo for API(s) 1.0.0, 1.1.0, 2.0.0
+Holograms FleetHD by FleetHD for API(s) 1.10.0
+HungerGames 1.0.0 by  for API(s) 1.1.0, 2.0.0
+IFloatingText 1.1.3 by ibook for API(s) 2.0.0, 3.0.0, 3.0.0 Alpha 6, 3.0.0 Alpha 7
+ImagicalAuth 1.1.3 by ImagicalGamer, LYT for API(s) 1.0.0, 2.0.0, 3.0.0, 3.0.1, 3.0.0 Alpha 6, 3.0.0 Alpha 7
+iManager 1.1.0 by Gamecrafter for API(s) 1.10.0, 2.0.0
+iProtector 3.1b by LDX for API(s) 1.9.0, 2.0.0

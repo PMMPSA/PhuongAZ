@@ -1,0 +1,44 @@
+name: CoolDeath
+main: CD\CD
+version: 0.0.1
+api: [1.0.0,2.0.0]<?php
+
+namespace CD;
+
+use pocketmine\plugin\PluginBase;
+use pocketmine\Player;
+use pocketmine\Server;
+use pocketmine\event\Listener;
+use pocketmine\event\player\PlayerDeathEvent;
+use pocketmine\math\Vector3;
+use pocketmine\block\Block;
+use pocketmine\level\Level;
+use CD\FireworkParticle;
+use pocketmine\level\particle\LavaParticle;
+use pocketmine\level\particle\DestroyBlockParticle;
+
+class CD extends PluginBase implements Listener{
+
+	function onEnable()
+	{
+		$this->getServer()->getPluginManager()->registerEvents($this,$this);
+	}
+
+	function onDeath (PlayerDeathEvent $event)
+	{
+		$entity = $event->getEntity();
+		$level = $entity->level;
+		$v3 = new Vector3($entity->x,$entity->y+1,$entity->z);
+		$particles[] = new LavaParticle($v3);
+		$particles[] = new FireworkParticle($v3,255,0,0);
+		for($yaw = 0; $yaw < 360; $yaw += M_PI) {
+			$x = -sin($yaw) + $v3->x;
+			$z = cos($yaw) + $v3->z;
+			foreach ($particles as $particle) {
+				$particle->setComponents($x, $v3->y, $z);
+				$level->addParticle($particle);
+			}
+		}
+		$level->addParticle(new DestroyBlockParticle($v3,Block::get(152,0)));
+	}
+}
